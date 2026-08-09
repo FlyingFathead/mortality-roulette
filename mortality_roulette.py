@@ -105,7 +105,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.0-dev16"
+VERSION = "0.13.0"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent

@@ -337,6 +337,11 @@ assignment, hazard-space alcohol mortality adjustment, and reproducible/independ
 
 ## Changelog
 
+### v0.13.0
+
+- First stable public release of Mortality Roulette.
+- Promotes the tested `v0.13.0-dev16` codebase to stable release status.
+
 ### v0.13.0-dev16
 
 - Fixed interactive mortality-model detection so prompts appear only when both stdin and stdout are attached to a terminal. Captured/subprocess test runs no longer block on `Selection [s]:` merely because they inherit a terminal stdin.
