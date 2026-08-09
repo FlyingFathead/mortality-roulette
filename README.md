@@ -622,7 +622,7 @@ Deathmatch presentation/semantics hardening:
 
 ### Smoking and combined exposure
 
-Smoking is planned as an independent first-class lifestyle exposure using the `🚬` indicator. Contestants should eventually support at least these states independently per player:
+Smoking is planned as an independent first-class lifestyle exposure using the `🚬` indicator, given its substantial impact on long-term morbidity and mortality trajectories. Contestants should eventually support at least these states independently per player:
 
 - neither exposure
 - `🍷` alcohol only
@@ -648,6 +648,15 @@ Primary statistical/data sources:
 See `datasets/README.md` and `datasets/manifest.json` for the bundled-file provenance map.
 
 Alcohol-risk calibration and disease-specific scenario references are documented next to the relevant constants/functions in `mortality_roulette.py`.
+
+---
+
+## License
+
+No software license has been granted for Mortality Roulette at this time.
+
+Third-party datasets remain subject to their respective source licences and terms.
+See `datasets/README.md` and `datasets/manifest.json` for details.
 
 ---
 
