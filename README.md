@@ -4,7 +4,7 @@
 
 It rolls a simulated life year by year using age-, sex-, country- and model-specific mortality probabilities and, when death occurs, can continue into cause of death, detailed cause trees and seasonal timing.
 
-⚠ **This is a statistical concept project, not an individualized medical prognosis or healthcare decision tool.**
+⚠ **This is a statistical concept project, not an individualized medical prognosis or healthcare decision tool. This project presents mortality probabilities and causes of death directly and may be unsettling to some readers.**
 
 ## ⚠ Disclaimer
 
