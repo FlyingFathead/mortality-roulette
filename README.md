@@ -653,10 +653,9 @@ Alcohol-risk calibration and disease-specific scenario references are documented
 
 ## License
 
-No software license has been granted for Mortality Roulette at this time.
+No software license has been granted for Mortality Roulette at this time. If you are interested in the project, collaboration, or licensing, please contact **[FlyingFathead](https://github.com/FlyingFathead)**.
 
-Third-party datasets remain subject to their respective source licences and terms.
-See `datasets/README.md` and `datasets/manifest.json` for details.
+Third-party datasets remain subject to their respective source licences and terms. See `datasets/README.md` and `datasets/manifest.json` for details.
 
 ---
 
