@@ -56,12 +56,15 @@ The default/recommended `smoothed` model is still derived from the bundled offic
 
 ### Fun run: Boozehound Deathmatch 🍷⚔️
 
-For added morbid education about how sustained lifestyle hazards can modify an already-unfriendly mortality baseline, load up Finland and Canada with the Boozehound/Wino scenario and let the cause-hazard model do its thing:
+For added morbid education about how sustained lifestyle hazards can modify an already-unfriendly mortality baseline, load up Finland and Canada with the Boozehound/Wino scenario and let the cause-hazard model do its thing.
+
+Quick fun run example:
 
 ```bash
 python mortality_roulette.py \
   --deathmatch fi ca \
   --sex m \
+  --mortality-model official \
   --boozehound-wino \
   --alcohol-model cause-hazard-prototype \
   --cause-hazard-weight-model evidence-v4-cancer
