@@ -225,7 +225,9 @@ Controls remain available:
 
 Batch mode remains lean by default (broad/optional cause work and no monthly timing unless explicitly requested), and `--printout` remains qx-only. Finland uses Statistics Finland cause data and Canadian cause selection uses Canada's WHO Mortality Database submission. Seasonal timing is rolled only after death and does not alter annual mortality or cause selection.
 
-If the resolved underlying cause is suicide (`X60-X84` / `Y87.0`), `v0.13.1` adds one further **STATISTICAL REASON** roll. Finland and Canada use separate sex/age evidence models; unsupported future countries fall back to an explicitly labelled Finnish-Canadian reference distribution. This is a probabilistic context model, not an assertion of an individual's proven motive. See `datasets/README.md` for methodology and provenance.
+If the resolved underlying cause is suicide (`X60-X84` / `Y87.0`), the simulator adds one further **STATISTICAL REASON** roll. Finland and Canada use separate sex/age evidence models; unsupported future countries fall back to an explicitly labelled Finnish-Canadian reference distribution. This is a probabilistic context model, not an assertion of an individual's proven motive.
+
+`v0.13.2` also adds two narrow conditional detail rolls where published evidence supports them: `X80` (intentional self-harm by jumping from a high place) can receive a broad **LOCATION TYPE**, and `X41` accidental psychotropic/antiepileptic poisoning can receive a broad **DRUG CLASS**. These are source-weighted category rolls only: no heights, named hotspots, doses or molecule-level lethality ranking are modeled. See `datasets/README.md` for methodology and provenance.
 
 ### Alcohol scenarios
 
@@ -370,6 +372,8 @@ Primary statistical/data sources:
 - [WHO Mortality Database](https://www.who.int/data/data-collection-tools/who-mortality-database) — Canadian civil-registration cause-of-death data and Finnish deep-detail support where available.
 - WHO ICD-10 2019 terminology — code-title presentation metadata. WHO retains copyright/licensing control over ICD-10; this material is not represented as Statistics Finland/Statistics Canada open data.
 - [Human Mortality Database](https://www.mortality.org/) — optional Finnish historical cohort life-table input.
+- Suicide statistical-reason evidence: Finnish nationwide psychological-autopsy studies (Heikkinen and colleagues) plus Canadian coroner/medical-examiner studies from Alberta and Montréal; exact references and model provenance are in `datasets/README.md`.
+- Conditional external-cause context evidence: Toronto/Swiss/Taipei jumping-site studies for `X80`, and Finnish poisoning studies plus Public Health Agency of Canada coroner/medical-examiner toxicology data for `X41`; exact references and modeling limitations are in `datasets/README.md`.
 
 See `datasets/README.md` and `datasets/manifest.json` for the bundled-file provenance map.
 

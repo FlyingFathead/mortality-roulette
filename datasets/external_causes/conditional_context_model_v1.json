@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "model_id": "external-cause-conditional-context-v1",
+  "purpose": "Conditional non-actionable context rolls after selected external-cause ICD outcomes. These rolls never alter mortality or cause selection.",
+  "contexts": {
+    "X80_LOCATION_TYPE": {
+      "trigger_icd": [
+        "X80"
+      ],
+      "heading": "LOCATION TYPE",
+      "compact_row": "LOCATION",
+      "categories": {
+        "residential_building": "Residential building",
+        "office_business_building": "Office / business building",
+        "hospital_healthcare_building": "Hospital / healthcare building",
+        "shopping_commercial_building": "Shopping / commercial building",
+        "bridge": "Bridge"
+      },
+      "models": {
+        "CA": {
+          "label": "Canada",
+          "distribution": {
+            "residential_building": 0.4909125511466362,
+            "office_business_building": 0.09525168902845178,
+            "hospital_healthcare_building": 0.0586164240175088,
+            "shopping_commercial_building": 0.036635265010943,
+            "bridge": 0.31858407079646023
+          },
+          "provenance": "Toronto pre-barrier annual means provide the Canada top-level split: 38.5 building jumps versus 9.3 at Bloor Street Viaduct plus 8.7 at other bridges. Building subtypes are distributed using Chen, Gunnell & Lu (Taipei) proportions normalized across their four reported building categories. Model-normalized site-type roll.",
+          "model_status": "Canada-native top-level split + international building-subtype reference"
+        },
+        "INTL_REFERENCE": {
+          "label": "International jumping-site reference",
+          "distribution": {
+            "residential_building": 0.4855996447489453,
+            "office_business_building": 0.09422082659307893,
+            "hospital_healthcare_building": 0.05798204713420243,
+            "shopping_commercial_building": 0.03623877945887651,
+            "bridge": 0.32595870206489685
+          },
+          "provenance": "Equal blend of the Toronto pre-barrier building-versus-bridge split and the Swiss national report's approximate two-thirds-building/one-third-bridge pattern; building subtypes use Chen, Gunnell & Lu (Taipei) proportions normalized across their four reported building categories. No height, named hotspot or access information is modeled.",
+          "model_status": "international reference"
+        }
+      },
+      "country_model_map": {
+        "CA": "CA",
+        "FI": "INTL_REFERENCE"
+      },
+      "fallback_model": "INTL_REFERENCE",
+      "sources": [
+        {
+          "title": "Effect of a barrier at Bloor Street Viaduct on suicide rates in Toronto: natural experiment",
+          "authors": "Sinyor et al.",
+          "year": 2010,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/20605890/",
+          "use": "Canada building-versus-bridge jumping-site counts"
+        },
+        {
+          "title": "Suicide by Jumping and Accessibility of Bridges: Results from a National Survey in Switzerland",
+          "authors": "Reisch, Schuster & Michel",
+          "year": 2007,
+          "url": "https://doi.org/10.1521/suli.2007.37.6.681",
+          "use": "international building-versus-bridge reference"
+        },
+        {
+          "title": "Descriptive epidemiological study of sites of suicide jumps in Taipei, Taiwan",
+          "authors": "Chen, Gunnell & Lu",
+          "year": 2009,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/19190275/",
+          "use": "building subtype proportions"
+        }
+      ]
+    },
+    "X41_DRUG_CLASS": {
+      "trigger_icd": [
+        "X41"
+      ],
+      "heading": "DRUG CLASS",
+      "compact_row": "DRUG CLASS",
+      "categories": {
+        "benzodiazepines_sedative_hypnotics": "Benzodiazepines / sedative-hypnotics",
+        "antidepressants": "Antidepressants",
+        "antipsychotics_neuroleptics": "Antipsychotics / neuroleptics",
+        "antiepileptics_gabapentinoids": "Antiepileptics / gabapentinoids"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland",
+          "profiles": {
+            "all": {
+              "distribution": {
+                "benzodiazepines_sedative_hypnotics": 0.20634920634920634,
+                "antidepressants": 0.38095238095238093,
+                "antipsychotics_neuroleptics": 0.25396825396825395,
+                "antiepileptics_gabapentinoids": 0.15873015873015872
+              },
+              "provenance": "Primary-agent counts from 684 fatal poisonings in Northern Finland, 2007-2011: antidepressants 48, neuroleptics 32, benzodiazepines 26, antiepileptics 20; normalized over these X41-compatible classes. Statistics Finland separately reports tranquilliser/sleeping-medicine poisonings, especially benzodiazepines, as a major accidental-poisoning group.",
+              "model_status": "Finnish regional primary-agent evidence; not a nationwide X41-only cross-tab"
+            }
+          }
+        },
+        "CA": {
+          "label": "Canada",
+          "profiles": {
+            "male": {
+              "distribution": {
+                "benzodiazepines_sedative_hypnotics": 0.5128805620608899,
+                "antidepressants": 0.2810304449648712,
+                "antipsychotics_neuroleptics": 0.1405152224824356,
+                "antiepileptics_gabapentinoids": 0.06557377049180328
+              },
+              "provenance": "PHAC national coroner/medical-examiner chart review, 2016-2017. Sex-specific counts identified as causing death are normalized across X41-compatible classes: benzodiazepines plus Z-drugs, tricyclic plus other antidepressants, antipsychotics, and gabapentinoids.",
+              "model_status": "Canada national sex-specific evidence-weighted X41-compatible class model"
+            },
+            "female": {
+              "distribution": {
+                "benzodiazepines_sedative_hypnotics": 0.4173441734417344,
+                "antidepressants": 0.4010840108401084,
+                "antipsychotics_neuroleptics": 0.11924119241192412,
+                "antiepileptics_gabapentinoids": 0.06233062330623306
+              },
+              "provenance": "PHAC national coroner/medical-examiner chart review, 2016-2017. Sex-specific counts identified as causing death are normalized across X41-compatible classes: benzodiazepines plus Z-drugs, tricyclic plus other antidepressants, antipsychotics, and gabapentinoids.",
+              "model_status": "Canada national sex-specific evidence-weighted X41-compatible class model"
+            }
+          }
+        },
+        "FI_CA_REFERENCE": {
+          "label": "Finnish-Canadian X41 reference",
+          "profiles": {
+            "male": {
+              "distribution": {
+                "benzodiazepines_sedative_hypnotics": 0.3596148842050481,
+                "antidepressants": 0.3309914129586261,
+                "antipsychotics_neuroleptics": 0.19724173822581978,
+                "antiepileptics_gabapentinoids": 0.11215196461050499
+              },
+              "provenance": "Equal 50/50 average of normalized Finland all-sex and Canada male X41-compatible class profiles.",
+              "model_status": "fallback reference"
+            },
+            "female": {
+              "distribution": {
+                "benzodiazepines_sedative_hypnotics": 0.3118466898954704,
+                "antidepressants": 0.3910181958962447,
+                "antipsychotics_neuroleptics": 0.18660472319008903,
+                "antiepileptics_gabapentinoids": 0.1105303910181959
+              },
+              "provenance": "Equal 50/50 average of normalized Finland all-sex and Canada female X41-compatible class profiles.",
+              "model_status": "fallback reference"
+            }
+          }
+        }
+      },
+      "country_model_map": {
+        "FI": "FI",
+        "CA": "CA"
+      },
+      "fallback_model": "FI_CA_REFERENCE",
+      "sources": [
+        {
+          "title": "Fatal poisonings in Northern Finland: causes, incidence, and rural-urban differences",
+          "authors": "Koskela et al.",
+          "year": 2017,
+          "url": "https://doi.org/10.1186/s13049-017-0431-8",
+          "use": "Finnish primary-agent class counts"
+        },
+        {
+          "title": "Causes of death 2019/2020 accidental-poisoning reports",
+          "authors": "Statistics Finland",
+          "year": "2019-2020",
+          "url": "https://stat.fi/til/ksyyt/2020/ksyyt_2020_2021-12-10_kat_005_en.html",
+          "use": "national Finnish validation that tranquilliser/sleeping-medicine poisonings, especially benzodiazepines, are a major accidental-poisoning group"
+        },
+        {
+          "title": "Substance-related acute toxicity deaths in Canada from 2016 to 2017",
+          "authors": "Public Health Agency of Canada",
+          "year": "2016-2017",
+          "url": "https://www.canada.ca/en/health-canada/services/opioids/data-surveillance-research/substance-related-acute-toxicity-deaths-canada-2016-2017-review-coroner-medical-examiner-files.html",
+          "use": "Canada national sex-specific substance-class counts"
+        }
+      ]
+    }
+  }
+}

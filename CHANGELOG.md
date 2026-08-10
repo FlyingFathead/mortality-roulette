@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.2
+
+- Added an `X80` conditional **LOCATION TYPE** roll using broad, non-actionable site categories. Canada uses a Toronto-derived building/bridge split with peer-reviewed building-subtype evidence; Finland and unsupported countries use an explicitly labelled international reference where native site data are unavailable.
+- Added an `X41` conditional **DRUG CLASS** roll. Finland uses Finnish fatal-poisoning primary-agent evidence; Canada uses sex-specific national coroner/medical-examiner substance-class evidence. The model does not include doses or molecule-level lethality rankings.
+- Added independent RNG streams for both context rolls so they do not perturb mortality, cause, detail, suicide-reason or seasonal timing rolls.
+- Added regular-run CSV fields and Deathmatch `LOCATION` / `LOCATION MODEL` and `DRUG CLASS` / `DRUG MODEL` rows.
+- Added source/provenance documentation in the README and bundled dataset documentation, plus regression coverage and manifest integrity for the new model file.
+
 ## v0.13.1
 
 - Refreshed stale size/checksum metadata for the already-bundled Finnish detailed-cause dataset; dataset content itself is unchanged by this release.

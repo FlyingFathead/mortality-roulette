@@ -57,3 +57,20 @@ Key references:
 - Heikkinen ME, Lönnqvist JK. *Recent Life Events in Elderly Suicide: A Nationwide Study in Finland*. Int Psychogeriatr. 1995. https://pubmed.ncbi.nlm.nih.gov/8829434/
 - Quan H, Arboleda-Flórez J. *Elderly Suicide in Alberta: Difference by Gender*. Can J Psychiatry. 1999;44:762-768. https://doi.org/10.1177/070674379904400801
 - Houle J et al. *Coroners' records on suicide mortality in Montréal: limitations and implications in suicide prevention strategies*. Chronic Diseases and Injuries in Canada. 2014;34(1). https://www.canada.ca/en/public-health/services/reports-publications/health-promotion-chronic-disease-prevention-canada-research-policy-practice/vol-34-no-1-2014/coroners-records-suicide-mortality-montreal-limitations-implications-suicide-prevention-strategies.html
+
+### Conditional external-cause context model
+
+- `datasets/external_causes/conditional_context_model_v1.json`
+- Purpose: add one further broad conditional category only after an already-resolved matching ICD outcome. It never changes mortality or cause selection.
+- `X80` location type: Canada uses Toronto coroner evidence for the building-versus-bridge split; building subtypes use Chen, Gunnell & Lu's Taipei site study. Finland currently uses an explicitly labelled international reference because no comparable Finland-native X80 site-type table was found. No height, named hotspot or access information is included.
+- `X41` drug class: Finland uses primary-agent counts from a Northern Finland cause-of-death study (antidepressants, neuroleptics, benzodiazepines and antiepileptics), with Statistics Finland national reports as qualitative validation. Canada uses sex-specific class counts from the Public Health Agency of Canada's national coroner/medical-examiner chart review. These are normalized class weights, not dose or molecule-specific lethality estimates.
+- Future countries/cells fall back only where explicitly declared in the JSON, with provenance retained in output.
+
+Key references:
+
+- Sinyor M et al. *Effect of a barrier at Bloor Street Viaduct on suicide rates in Toronto: natural experiment*. BMJ. 2010. https://pubmed.ncbi.nlm.nih.gov/20605890/
+- Reisch T, Schuster U, Michel K. *Suicide by Jumping and Accessibility of Bridges: Results from a National Survey in Switzerland*. Suicide Life Threat Behav. 2007. https://doi.org/10.1521/suli.2007.37.6.681
+- Chen YY, Gunnell D, Lu TH. *Descriptive epidemiological study of sites of suicide jumps in Taipei, Taiwan*. Inj Prev. 2009. https://pubmed.ncbi.nlm.nih.gov/19190275/
+- Koskela L et al. *Fatal poisonings in Northern Finland: causes, incidence, and rural-urban differences*. Scand J Trauma Resusc Emerg Med. 2017. https://doi.org/10.1186/s13049-017-0431-8
+- Statistics Finland. *Causes of death 2020: Accident mortality decreased for women* (accidental poisoning discussion). https://stat.fi/til/ksyyt/2020/ksyyt_2020_2021-12-10_kat_005_en.html
+- Public Health Agency of Canada. *Substance-related acute toxicity deaths in Canada from 2016 to 2017: A review of coroner and medical examiner files*. https://www.canada.ca/en/health-canada/services/opioids/data-surveillance-research/substance-related-acute-toxicity-deaths-canada-2016-2017-review-coroner-medical-examiner-files.html

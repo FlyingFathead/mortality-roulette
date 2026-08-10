@@ -116,6 +116,17 @@
       "attribution": "See datasets/README.md and the embedded sources array in the JSON.",
       "sha256": "69b6b9388f98616fab1b4493fbaed91e9549c393c189463f3d5e9b1d16ed8f8c",
       "bytes": 33363
+    },
+    {
+      "path": "datasets/external_causes/conditional_context_model_v1.json",
+      "agency": "Mortality Roulette evidence model (Canadian, Finnish, Swiss and Taiwanese published/official sources)",
+      "source": "Conditional external-cause context model v1 (X80 location type; X41 drug class)",
+      "reference": "Toronto 1993-2007; Switzerland 1990-2003; Taipei 2002-2005; Finland 2000-2009; Canada 2016-2017",
+      "url": "datasets/README.md",
+      "license": "Project-authored derived model; source publications/data retain their respective rights",
+      "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
+      "sha256": "9b1e8ffe7fd3905e36d691f1eeaa7fca53ebdf74a7361fe98c540df609e442b5",
+      "bytes": 9109
     }
   ]
 }
