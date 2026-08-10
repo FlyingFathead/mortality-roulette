@@ -162,6 +162,7 @@ class ExternalContextModel:
             "compact_row": str(context.get("compact_row", context_id)),
             "category": category_id,
             "label": str(categories.get(category_id, category_id.replace("_", " "))),
+            "roll": u,
             "conditional_probability": dist[category_id],
             "requested_country": resolved["requested_country"],
             "model_country": resolved["model_country"],

@@ -69,6 +69,16 @@ class SuicideReasonModelTests(unittest.TestCase):
         self.assertTrue(left["available"])
         self.assertEqual(left["model_label"], "Canada")
 
+    def test_finland_unresolved_residual_has_noncausal_label_and_provenance(self) -> None:
+        category = mr.SUICIDE_REASON_MODEL.categories["unresolved"]
+        self.assertEqual(category["label"], "No specific recent life event reported")
+        self.assertIn("does not mean there was no reason", category["semantics"].casefold())
+        profile = mr.SUICIDE_REASON_MODEL.resolve(country="fi", sex="male", age=55)
+        assert profile is not None
+        self.assertAlmostEqual(profile.distribution["unresolved"], 0.2, places=9)
+        self.assertIn("national reported-life-event residual", profile.provenance)
+        self.assertIn("not an age/sex-specific observation", profile.provenance)
+
     def test_canadian_old_age_profile_tracks_alberta_physical_health_gradient(self) -> None:
         p55 = mr.SUICIDE_REASON_MODEL.resolve(country="ca", sex="male", age=55)
         p70 = mr.SUICIDE_REASON_MODEL.resolve(country="ca", sex="male", age=70)

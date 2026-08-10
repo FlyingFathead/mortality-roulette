@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.13.3
+
+- Generalized the existing X80 location feature into a reusable downstream **PLACE** layer while preserving all existing X80 source weights, fallbacks and RNG behavior. Deathmatch now presents X80 through `PLACE` / `PLACE MODEL`.
+- Added independent country/cause-conditioned PLACE rolls for Finnish/Canadian drowning, Finnish homicide, Finnish/Canadian road traffic, Finnish/Canadian cancer terminal setting, and Finnish neurodegenerative terminal setting. Unsupported country/cause combinations remain blank instead of receiving a borrowed generic location.
+- Added ICD-aware drowning constraints: bathtub/pool codes resolve directly, while natural/open-water codes restrict and renormalize the national water-setting distribution to compatible categories. Broad transport parents cannot masquerade as road traffic.
+- Fixed PLACE trigger matching so ICD range endpoints embedded in broad parent labels (for example `V01-Y89`) are never treated as resolved event codes; this prevents non-traffic external causes such as `X70` suicide from spuriously receiving a road-collision PLACE.
+- Added a separate generalized PLACE RNG stream plus regular-run CSV fields (`place`, probability, roll, model, semantic and context id). Existing X80 keeps its original independent RNG stream, so old seeded X80 outcomes do not move.
+- Renamed the Finnish suicide 20% residual from `No specific precipitating context resolved` to `No specific recent life event reported` and documented that it is a national residual from ~80% reported recent-life-event coverage, not an age/sex-specific observation and not a claim of “no reason.”
+- Added bundled PLACE evidence/provenance data, regression coverage, README/dataset methodology documentation and refreshed manifest metadata.
+
 ## v0.13.2
 
 - Added an `X80` conditional **LOCATION TYPE** roll using broad, non-actionable site categories. Canada uses a Toronto-derived building/bridge split with peer-reviewed building-subtype evidence; Finland and unsupported countries use an explicitly labelled international reference where native site data are unavailable.

@@ -48,6 +48,7 @@ WHO remains the copyright holder. The 2019 ICD-10 publication is distributed und
 - Finland uses the nationwide Finnish psychological-autopsy literature (Heikkinen and colleagues) as its country evidence base.
 - Canada uses Canadian coroner/medical-examiner evidence, especially Quan & Arboleda-Flórez's Alberta age-55+ study and Houle et al.'s Montréal coroner profile.
 - The Finnish and some younger Canadian source variables are overlapping circumstances rather than mutually exclusive motives. Those cells are therefore converted to relative evidence weights and normalized for one display roll. The JSON records the provenance and modelling status of each cell.
+- Finland-specific residual semantics: Heikkinen et al. reported a recent life event in 80% of the nationwide suicide sample. The model therefore retains 20% as a national **no specific recent life event reported** residual. That residual is repeated across Finnish age/sex profiles because the source does not provide an age/sex-specific complement; it is not evidence that 20% of each subgroup had "no reason" for suicide.
 - `FI_CA_REFERENCE` is an equal 50/50 average of the already-normalized Finnish and Canadian sex/age cells. It is a transparent fallback for future countries without native context data, not a claim that Finnish/Canadian circumstances describe that country.
 
 Key references:
@@ -74,3 +75,30 @@ Key references:
 - Koskela L et al. *Fatal poisonings in Northern Finland: causes, incidence, and rural-urban differences*. Scand J Trauma Resusc Emerg Med. 2017. https://doi.org/10.1186/s13049-017-0431-8
 - Statistics Finland. *Causes of death 2020: Accident mortality decreased for women* (accidental poisoning discussion). https://stat.fi/til/ksyyt/2020/ksyyt_2020_2021-12-10_kat_005_en.html
 - Public Health Agency of Canada. *Substance-related acute toxicity deaths in Canada from 2016 to 2017: A review of coroner and medical examiner files*. https://www.canada.ca/en/health-canada/services/opioids/data-surveillance-research/substance-related-acute-toxicity-deaths-canada-2016-2017-review-coroner-medical-examiner-files.html
+
+### Cause-conditional PLACE model
+
+- `datasets/places/cause_place_model_v1.json`
+- Purpose: extend the existing statistically weighted X80 location feature into one reusable downstream **PLACE** layer. The mortality roll, broad cause, cause detail, suicide context, X80 site roll, X41 drug-class roll and seasonality remain separate and unchanged.
+- RNG semantics: generalized PLACE uses its own stream. Existing X80 retains its original `0x5838304C` stream and distribution; X80 is merely rendered through the unified PLACE field. The generalized place stream therefore cannot reshuffle a pre-existing seeded X80 result.
+- ICD constraint rule: specific environment information already resolved by ICD wins before statistical refinement. W65/W66 resolve to bathtub and W67/W68 to swimming pool. W69/W70 and watercraft-drowning codes V90/V92 restrict the country model to explicitly compatible natural/open-water categories and renormalize only those categories. Mixed/unspecified residuals are excluded rather than guessed. W73/W74 can use the broader drowning distribution because the code does not already fix a narrower setting.
+- Drowning, Finland: Safety Investigation Authority S1/2010Y investigated 228 accidental water-related deaths during 1 Apr 2010–31 Mar 2011: lake 110, sea 51, river 22, pond 14, indoor pool 5, and 26 in smaller water settings/bathtubs. Raw counts are normalized for the broad roll. Natural-water-constrained rolls use only the explicitly compatible lake/sea/river/pond counts.
+- Drowning, Canada: the 2024 Canadian Detailed Drowning Report gives the national 2015–2019 distribution lake/pond 35%, river 26%, bathtub 13%, pool 9%, ocean 6%, other 11%. Natural/open-water-constrained rolls use lake/pond, river and ocean only.
+- Homicide, Finland: European Homicide Monitor 2003–2006 tables provide sex-specific known-event-location counts (350 male victims, 136 female victims). Unknown location is excluded from the conditional known-place roll. No Canada homicide PLACE fallback is bundled yet; Canadian homicide therefore prints no PLACE rather than borrowing Finnish scene patterns.
+- Road traffic, Finland: European Commission/CARE 2020 fatality setting weights are rural road 68%, urban road 28%, motorway 4%. A broad `V01–V99` transport parent is intentionally insufficient to trigger this model; a resolved road/land-transport detail is required so water/air transport cannot acquire a fake road setting.
+- Road traffic, Canada: Transport Canada 2023 fatal-collision counts are urban 799, rural 932, not stated 37 (1,768 total), normalized directly.
+- Cancer terminal place, Finland: Ahtiluoto et al.'s nationwide 2019 register cohort reports hospital 82.1%, home 11.0%, long-term-care facility 6.8%; rounding is normalized within the model.
+- Cancer terminal place, Canada: CIHI/Canadian Partnership Against Cancer reporting for Statistics Canada 2005–2009 gives approximately 70% hospital and 11% home. The remaining 19% is retained explicitly as `other / unspecified`; it is a derived residual, not an observed subcategory split.
+- Neurodegenerative terminal place, Finland: the same nationwide register framework gives hospital 43.2%, home 7.0%, long-term care 49.7% for the documented neurodegenerative grouping. No Canadian fallback is used.
+- Semantic distinction: `event_setting` (for example lake, homicide scene, rural road) and `terminal_place` (for example hospital/home/LTC) remain distinct in model metadata even though the CLI deliberately presents both under the compact **PLACE** label.
+- Absence is meaningful: if neither ICD nor the bundled evidence supports a defensible place distribution for that cause/country, PLACE is omitted.
+
+Key references:
+
+- Safety Investigation Authority Finland. *S1/2010Y Deaths by Drowning in Finland 1.4.2010–31.3.2011*. https://www.turvallisuustutkinta.fi/en/investigations/investigation-reports/s1-2010y-deaths-by-drowning-in-finland-1-4-2010-31-3-2011/
+- Lifesaving Society / Drowning Prevention Research Centre Canada. *2024 Canadian Detailed Drowning Report*. https://www.lifesavingsociety.sk.ca/fileadmin/lifesavingsociety/storage/2024/Drowning_Reports/LS-Canadian-Drowning-Report-2024-Web.pdf
+- Granath et al. *Homicide in Finland, the Netherlands and Sweden: A First Study on the European Homicide Monitor Data*. 2011. https://irep.ntu.ac.uk/id/eprint/28206/1/5724_Ganpat.pdf
+- European Commission / CARE. *National Road Safety Profile – Finland*. https://road-safety.transport.ec.europa.eu/system/files/2023-02/erso-country-overview-2023-finland_0.pdf
+- Transport Canada. *Canadian Motor Vehicle Traffic Collision Statistics: 2023*. https://tc.canada.ca/en/road-transportation/statistics-data/canadian-motor-vehicle-traffic-collision-statistics/2023/canadian-motor-vehicle-traffic-collision-statistics-2023
+- Ahtiluoto et al. *Impact of specialist palliative care on utilization of healthcare and social services at the end-of-life: a nationwide register-based cohort study*. Eur J Public Health. 2025. https://doi.org/10.1093/eurpub/ckaf044
+- Canadian Institute for Health Information. *End-of-Life Hospital Care for Cancer Patients*. 2013. https://publications.gc.ca/collections/collection_2013/icis-cihi/H117-5-22-2013-eng.pdf

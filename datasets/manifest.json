@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated": "2026-08-10",
+  "generated": "2026-08-11",
   "notes": [
     "Bundled snapshots are runtime defaults only where coverage exists.",
     "Explicit cache paths and refresh/download paths remain supported.",
@@ -110,12 +110,12 @@
       "path": "datasets/suicide/suicide_reason_model_v1.json",
       "agency": "Mortality Roulette evidence model (Finnish + Canadian published studies)",
       "source": "Suicide statistical-reason/context model v1",
-      "reference": "Finnish 1987-1988 psychological autopsy; Alberta 1984-1995; Montreal 2007-2009",
+      "reference": "Finnish 1987-1988 psychological autopsy; Alberta 1984-1995; Montreal 2007-2009; semantics clarified 2026-08-11",
       "url": "datasets/README.md",
       "license": "Project-authored derived model; source publications retain their respective rights",
       "attribution": "See datasets/README.md and the embedded sources array in the JSON.",
-      "sha256": "69b6b9388f98616fab1b4493fbaed91e9549c393c189463f3d5e9b1d16ed8f8c",
-      "bytes": 33363
+      "sha256": "0bbf25ba2c2619ef2170db9e0dee9b1cb2dc7ad716c22d3027320cd28cfee235",
+      "bytes": 35895
     },
     {
       "path": "datasets/external_causes/conditional_context_model_v1.json",
@@ -127,6 +127,17 @@
       "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
       "sha256": "9b1e8ffe7fd3905e36d691f1eeaa7fca53ebdf74a7361fe98c540df609e442b5",
       "bytes": 9109
+    },
+    {
+      "path": "datasets/places/cause_place_model_v1.json",
+      "agency": "Mortality Roulette evidence model (Finnish and Canadian official/published sources)",
+      "source": "Cause-conditional PLACE model v1",
+      "reference": "FI/CA drowning; FI homicide; FI/CA road traffic; FI/CA cancer; FI neurodegenerative",
+      "url": "datasets/README.md",
+      "license": "Project-authored derived model; source publications/data retain their respective rights",
+      "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
+      "sha256": "014dfb4127e12342f471f134bc4625f598bf89a6af62b0e456bdefe9f71502ab",
+      "bytes": 15308
     }
   ]
 }

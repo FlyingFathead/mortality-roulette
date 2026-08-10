@@ -143,8 +143,8 @@ class DeathmatchContextRowsTests(unittest.TestCase):
         finally:
             mr.ACTIVE_COUNTRY = old_country
             mr.ACTIVE_CANADA_PROVINCE = old_province
-        self.assertIn(("LOCATION", "Bridge"), rows)
-        self.assertIn(("LOCATION MODEL", "Canada"), rows)
+        self.assertIn(("PLACE", "Bridge"), rows)
+        self.assertIn(("PLACE MODEL", "Canada"), rows)
         self.assertIn(("DRUG CLASS", "Antidepressants"), rows)
         self.assertIn(("DRUG MODEL", "Canada | male"), rows)
 

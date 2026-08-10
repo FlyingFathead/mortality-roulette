@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "model_id": "cause-place-v1",
+  "model_version": "2026-08-11",
+  "purpose": "Independent downstream PLACE rolls conditioned on already-resolved cause/detail. Event setting and terminal place are kept semantically distinct in metadata but rendered through one compact PLACE field.",
+  "probability_semantics": "Each distribution is conditional on the trigger cause and country/profile shown. Source counts/percentages are normalized only within the stated source population. PLACE never changes mortality, cause, cause detail, suicide context, X80 location, X41 drug class, or seasonality.",
+  "contexts": {
+    "DROWNING_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "W65-W74"
+        ],
+        "icd_exact": [
+          "V90",
+          "V92"
+        ],
+        "label_contains": [
+          "accidental drowning",
+          "water-transport-related drowning"
+        ]
+      },
+      "categories": {
+        "lake": "Lake",
+        "sea": "Sea / coastal water",
+        "river": "River",
+        "pond": "Pond",
+        "indoor_pool": "Indoor pool",
+        "other_small_water_or_bathtub": "Other small water body / bathtub",
+        "lake_pond": "Lake / pond",
+        "bathtub": "Bathtub",
+        "pool": "Swimming pool",
+        "ocean": "Ocean / sea",
+        "other": "Other / unspecified water setting"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | accidental drowning event setting",
+          "distribution": {
+            "lake": 110,
+            "sea": 51,
+            "river": 22,
+            "pond": 14,
+            "indoor_pool": 5,
+            "other_small_water_or_bathtub": 26
+          },
+          "provenance": "Safety Investigation Authority Finland S1/2010Y, all 228 accidental water-related deaths investigated 1 Apr 2010-31 Mar 2011: lake 110, sea 51, river 22, pond 14, indoor pool 5, remaining 26 in smaller waters such as ditches/brooks/bogs and bathtubs. Counts are rolled directly after normalization.",
+          "model_status": "Finland-native investigated fatal-event distribution",
+          "source_period": "2010-04-01 to 2011-03-31"
+        },
+        "CA": {
+          "label": "Canada | unintentional drowning event setting",
+          "distribution": {
+            "lake_pond": 0.35,
+            "river": 0.26,
+            "bathtub": 0.13,
+            "pool": 0.09,
+            "ocean": 0.06,
+            "other": 0.11
+          },
+          "provenance": "Lifesaving Society / Drowning Prevention Research Centre Canada, 2024 Canadian Detailed Drowning Report, national 2015-2019 water-related fatality distribution: lake/pond 35%, river 26%, bathtub 13%, pool 9%, ocean 6%, other 11%.",
+          "model_status": "Canada-native national fatal-event distribution",
+          "source_period": "2015-2019"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI",
+        "CA": "CA"
+      },
+      "sources": [
+        {
+          "title": "S1/2010Y Deaths by Drowning in Finland 1.4.2010-31.3.2011",
+          "publisher": "Safety Investigation Authority Finland",
+          "year": 2011,
+          "url": "https://www.turvallisuustutkinta.fi/en/investigations/investigation-reports/s1-2010y-deaths-by-drowning-in-finland-1-4-2010-31-3-2011/"
+        },
+        {
+          "title": "2024 Canadian Detailed Drowning Report",
+          "publisher": "Lifesaving Society / Drowning Prevention Research Centre Canada",
+          "year": 2024,
+          "url": "https://www.lifesavingsociety.sk.ca/fileadmin/lifesavingsociety/storage/2024/Drowning_Reports/LS-Canadian-Drowning-Report-2024-Web.pdf"
+        }
+      ],
+      "icd_constraints": [
+        {
+          "icd_exact": [
+            "W65",
+            "W66"
+          ],
+          "fixed": {
+            "category": "bathtub_icd",
+            "label": "Bathtub"
+          },
+          "provenance": "ICD-10 W65/W66 explicitly identifies a bathtub setting; no statistical water-setting roll is needed.",
+          "model_status": "ICD-resolved event setting"
+        },
+        {
+          "icd_exact": [
+            "W67",
+            "W68"
+          ],
+          "fixed": {
+            "category": "swimming_pool_icd",
+            "label": "Swimming pool"
+          },
+          "provenance": "ICD-10 W67/W68 explicitly identifies a swimming-pool setting; no statistical water-setting roll is needed.",
+          "model_status": "ICD-resolved event setting"
+        },
+        {
+          "icd_exact": [
+            "W69",
+            "W70",
+            "V90",
+            "V92"
+          ],
+          "allowed_categories_by_model": {
+            "FI": [
+              "lake",
+              "sea",
+              "river",
+              "pond"
+            ],
+            "CA": [
+              "lake_pond",
+              "river",
+              "ocean"
+            ]
+          },
+          "provenance": "The resolved ICD context requires natural/open water. The country distribution is therefore renormalized across source categories that are explicitly compatible with natural/open water; mixed or unspecified residual categories are excluded rather than guessed.",
+          "model_status": "Country-native distribution constrained by resolved ICD environment"
+        }
+      ]
+    },
+    "HOMICIDE_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "X85-Y09"
+        ],
+        "icd_exact": [
+          "Y871"
+        ],
+        "label_contains": [
+          "assault (x85-y09",
+          "homicide"
+        ]
+      },
+      "categories": {
+        "victim_home": "Victim's home",
+        "other_private_home": "Other private home",
+        "institution_dormitory": "Institution / dormitory",
+        "private_vehicle": "Private vehicle",
+        "shop_restaurant": "Shop / restaurant",
+        "workplace": "Workplace",
+        "hotel_motel": "Hotel / motel",
+        "park_forest": "Park / forest",
+        "street_road": "Street / road",
+        "other": "Other location"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | homicide event setting",
+          "profiles": {
+            "male": {
+              "distribution": {
+                "victim_home": 118,
+                "other_private_home": 126,
+                "institution_dormitory": 7,
+                "private_vehicle": 5,
+                "shop_restaurant": 24,
+                "workplace": 0,
+                "hotel_motel": 1,
+                "park_forest": 39,
+                "street_road": 24,
+                "other": 6
+              },
+              "provenance": "European Homicide Monitor, Finland 2003-2006, Table 7, male victims: 350 valid known-location cases. Source counts used directly; 5 unknown-location cases excluded from the conditional known-place roll.",
+              "model_status": "Finland-native sex-specific homicide-event distribution"
+            },
+            "female": {
+              "distribution": {
+                "victim_home": 83,
+                "other_private_home": 30,
+                "institution_dormitory": 1,
+                "private_vehicle": 0,
+                "shop_restaurant": 1,
+                "workplace": 0,
+                "hotel_motel": 0,
+                "park_forest": 12,
+                "street_road": 5,
+                "other": 4
+              },
+              "provenance": "European Homicide Monitor, Finland 2003-2006, Table 8, female victims: 136 valid known-location cases. Source counts used directly.",
+              "model_status": "Finland-native sex-specific homicide-event distribution"
+            }
+          },
+          "source_period": "2003-2006"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "sources": [
+        {
+          "title": "Homicide in Finland, the Netherlands and Sweden: A First Study on the European Homicide Monitor Data",
+          "authors": "Granath et al.",
+          "year": 2011,
+          "url": "https://irep.ntu.ac.uk/id/eprint/28206/1/5724_Ganpat.pdf",
+          "use": "Tables 7-8, Finland homicide locations by victim sex"
+        }
+      ]
+    },
+    "ROAD_TRAFFIC_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "V01-V89"
+        ],
+        "label_contains": [
+          "pedestrian injured in transport accident",
+          "pedal cyclist injured in transport accident",
+          "motor cyclist injured in transport accident",
+          "occupant of other motor vehicle injured in transport accident",
+          "other land transport accidents"
+        ],
+        "exclude_label_contains": [
+          "water transport",
+          "water-transport",
+          "air transport",
+          "transport accidents (v01-v99)",
+          "transport accidents (v01–v99)"
+        ]
+      },
+      "categories": {
+        "rural_road": "Rural road",
+        "urban_road": "Urban road",
+        "motorway": "Motorway",
+        "not_stated": "Road setting not stated"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | fatal road setting",
+          "distribution": {
+            "rural_road": 0.68,
+            "urban_road": 0.28,
+            "motorway": 0.04
+          },
+          "provenance": "European Commission/CARE National Road Safety Profile Finland, 2020 road fatalities: 68% rural roads, 28% urban roads, 4% motorways.",
+          "model_status": "Finland-native CARE fatality distribution",
+          "source_period": "2020"
+        },
+        "CA": {
+          "label": "Canada | fatal collision setting",
+          "distribution": {
+            "urban_road": 799,
+            "rural_road": 932,
+            "not_stated": 37
+          },
+          "provenance": "Transport Canada, Canadian Motor Vehicle Traffic Collision Statistics 2023, Number of Collisions by Location: 799 urban fatal collisions, 932 rural, 37 not stated, total 1,768. Counts used directly.",
+          "model_status": "Canada-native official fatal-collision distribution",
+          "source_period": "2023"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI",
+        "CA": "CA"
+      },
+      "sources": [
+        {
+          "title": "National Road Safety Profile - Finland",
+          "publisher": "European Commission / CARE",
+          "year": 2023,
+          "url": "https://road-safety.transport.ec.europa.eu/system/files/2023-02/erso-country-overview-2023-finland_0.pdf"
+        },
+        {
+          "title": "Canadian Motor Vehicle Traffic Collision Statistics: 2023",
+          "publisher": "Transport Canada",
+          "year": 2025,
+          "url": "https://tc.canada.ca/en/road-transportation/statistics-data/canadian-motor-vehicle-traffic-collision-statistics/2023/canadian-motor-vehicle-traffic-collision-statistics-2023"
+        }
+      ]
+    },
+    "CANCER_TERMINAL_PLACE": {
+      "semantic": "terminal_place",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "C00-C97"
+        ],
+        "label_contains": [
+          "malignant neoplasm"
+        ]
+      },
+      "categories": {
+        "hospital": "Hospital",
+        "home": "Home",
+        "long_term_care": "Long-term care facility",
+        "other": "Other / unspecified place"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | cancer place of death",
+          "distribution": {
+            "hospital": 0.821,
+            "home": 0.11,
+            "long_term_care": 0.068
+          },
+          "provenance": "Ahtiluoto et al. nationwide Finnish 2019 register cohort: among cancer decedents, place of death was hospital 82.1%, home 11.0%, long-term care facility 6.8%. Percentages are normalized for rounding.",
+          "model_status": "Finland-native nationwide register place-of-death distribution",
+          "source_period": "2019"
+        },
+        "CA": {
+          "label": "Canada | cancer place of death",
+          "distribution": {
+            "hospital": 0.7,
+            "home": 0.11,
+            "other": 0.19
+          },
+          "provenance": "CIHI End-of-Life Hospital Care for Cancer Patients, citing Canadian Partnership Against Cancer analysis of Statistics Canada data for 2005-2009: approximately 70% of cancer deaths occurred in hospital and 11% at home. The remaining 19% is an explicit derived residual covering other/unspecified settings; it is not split further.",
+          "model_status": "Canada-native national source + explicit residual",
+          "source_period": "2005-2009"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI",
+        "CA": "CA"
+      },
+      "sources": [
+        {
+          "title": "Impact of specialist palliative care on utilization of healthcare and social services at the end-of-life: a nationwide register-based cohort study",
+          "authors": "Ahtiluoto et al.",
+          "year": 2025,
+          "url": "https://doi.org/10.1093/eurpub/ckaf044"
+        },
+        {
+          "title": "End-of-Life Hospital Care for Cancer Patients",
+          "publisher": "Canadian Institute for Health Information",
+          "year": 2013,
+          "url": "https://publications.gc.ca/collections/collection_2013/icis-cihi/H117-5-22-2013-eng.pdf"
+        }
+      ]
+    },
+    "NEURODEGENERATIVE_TERMINAL_PLACE": {
+      "semantic": "terminal_place",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_exact": [
+          "F00",
+          "F01",
+          "F03",
+          "G20",
+          "G23",
+          "G30",
+          "R54"
+        ],
+        "icd_ranges": [
+          "G10-G13",
+          "G30-G32",
+          "G35-G37",
+          "G70-G73"
+        ],
+        "label_contains": [
+          "dementia",
+          "alzheimer",
+          "parkinson",
+          "neurodegenerative"
+        ]
+      },
+      "categories": {
+        "hospital": "Hospital",
+        "home": "Home",
+        "long_term_care": "Long-term care facility"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | neurodegenerative place of death",
+          "distribution": {
+            "hospital": 0.432,
+            "home": 0.07,
+            "long_term_care": 0.497
+          },
+          "provenance": "Ahtiluoto et al. nationwide Finnish 2019 register cohort: neurodegenerative decedents died in hospital 43.2%, at home 7.0%, and in long-term care 49.7%. Percentages are normalized for rounding. Trigger code family follows the Finnish life-limiting neurodegenerative grouping used in related register work.",
+          "model_status": "Finland-native nationwide register place-of-death distribution",
+          "source_period": "2019"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "sources": [
+        {
+          "title": "Impact of specialist palliative care on utilization of healthcare and social services at the end-of-life: a nationwide register-based cohort study",
+          "authors": "Ahtiluoto et al.",
+          "year": 2025,
+          "url": "https://doi.org/10.1093/eurpub/ckaf044"
+        }
+      ]
+    }
+  },
+  "precedence": [
+    "DROWNING_EVENT_PLACE",
+    "HOMICIDE_EVENT_PLACE",
+    "ROAD_TRAFFIC_EVENT_PLACE",
+    "CANCER_TERMINAL_PLACE",
+    "NEURODEGENERATIVE_TERMINAL_PLACE"
+  ]
+}

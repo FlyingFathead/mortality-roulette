@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "model_id": "suicide-statistical-reason-v1",
-  "model_version": "2026-08-10",
+  "model_version": "2026-08-11",
   "purpose": "Conditional statistical reason/context roll after an already-resolved suicide underlying cause. Does not affect mortality or suicide incidence.",
-  "probability_semantics": "Values are model-normalized probabilities for one displayed salient context. They are not individual motive determinations. Some source variables are overlapping life events/circumstances and some age/sex cells are evidence-shaped rather than direct cross-tabulations.",
+  "probability_semantics": "Values are model-normalized probabilities for one displayed salient recent-life-event/context category. They are not individual motive determinations. Some source variables are overlapping life events/circumstances and some age/sex cells are evidence-shaped rather than direct cross-tabulations. For Finland, the unresolved residual represents the approximately 20% of nationwide psychological-autopsy suicides for which no recent life event was reported in the source study; that 20% is a national source residual, not an age/sex-specific observed rate.",
   "fallback_model": "FI_CA_REFERENCE",
   "age_groups": [
     {
@@ -68,13 +68,14 @@
       "label": "Other recorded life stressor"
     },
     "unresolved": {
-      "label": "No specific precipitating context resolved"
+      "label": "No specific recent life event reported",
+      "semantics": "Residual category: the source evidence did not report a recent life event for this share. This does not mean there was no reason, motive, illness, stressor, or other precipitating circumstance."
     }
   },
   "models": {
     "FI": {
       "label": "Finland",
-      "provenance": "Finnish nationwide psychological-autopsy evidence model",
+      "provenance": "Finnish nationwide psychological-autopsy evidence model; the 20% unresolved share comes from the national finding that recent life events were reported in 80% of suicides and is not an age/sex-specific observed rate",
       "profiles": {
         "male": {
           "15-19": {
@@ -89,7 +90,7 @@
               "other": 0.099103749237,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "20-29": {
             "distribution": {
@@ -103,7 +104,7 @@
               "other": 0.064446831364,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "30-39": {
             "distribution": {
@@ -117,7 +118,7 @@
               "other": 0.05657708628,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "40-49": {
             "distribution": {
@@ -131,7 +132,7 @@
               "other": 0.054631592426,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "50-64": {
             "distribution": {
@@ -145,7 +146,7 @@
               "other": 0.054451093276,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "65-74": {
             "distribution": {
@@ -159,7 +160,7 @@
               "other": 0.069492200224,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "75+": {
             "distribution": {
@@ -173,7 +174,7 @@
               "other": 0.070422535211,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           }
         },
         "female": {
@@ -189,7 +190,7 @@
               "other": 0.114726492477,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "20-29": {
             "distribution": {
@@ -203,7 +204,7 @@
               "other": 0.077456833952,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "30-39": {
             "distribution": {
@@ -217,7 +218,7 @@
               "other": 0.068610634648,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "40-49": {
             "distribution": {
@@ -231,7 +232,7 @@
               "other": 0.066080432276,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "50-64": {
             "distribution": {
@@ -245,7 +246,7 @@
               "other": 0.06447496558,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "65-74": {
             "distribution": {
@@ -259,7 +260,7 @@
               "other": 0.076096864968,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           },
           "75+": {
             "distribution": {
@@ -273,7 +274,7 @@
               "other": 0.073857516541,
               "unresolved": 0.2
             },
-            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll; Finnish 20% unresolved share is a national reported-life-event residual, not an age/sex-specific observation"
           }
         }
       }
@@ -748,5 +749,8 @@
     "Canada age 50-64/65-74/75+ uses the Alberta study. Published age-specific physical/mental/financial percentages are retained within the known-stressor distribution; the residual is allocated in the sex-specific proportions of the other Alberta stressor categories. The published 55-64 cell is used as the 50-64 gameplay bracket.",
     "Canadian age groups below 50 use Montreal sex-specific coroner variables as relative anchors. Because those variables are overlapping and not age-cross-tabulated, age shaping is explicitly model-derived and the cell provenance says so.",
     "FI_CA_REFERENCE is an equal 50/50 average of the already-normalized Finnish and Canadian probabilities, not population-weighted. It is intended only as a transparent fallback for future countries/cells without native data."
+  ],
+  "notes": [
+    "For Finland, Heikkinen et al. reported recent life events in 80% of the nationwide suicide sample. The remaining 20% is retained as an unresolved national residual in every Finnish age/sex profile; it must not be read as an age/sex-specific observed rate or as evidence that no reason for the suicide existed."
   ]
 }
