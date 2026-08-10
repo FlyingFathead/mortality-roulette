@@ -40,3 +40,20 @@ WHO remains the copyright holder. The 2019 ICD-10 publication is distributed und
 ## Machine-readable provenance
 
 `manifest.json` records the repository path, source agency/table, reference year/range, source URL, licence/attribution note, byte size, and SHA-256 for each bundled file.
+
+### Suicide statistical-reason context model
+
+- `datasets/suicide/suicide_reason_model_v1.json`
+- Purpose: after the existing cause stack has already resolved a suicide (`X60-X84` / `Y87.0`), draw one additional age/sex-conditioned **statistical reason / precipitating context**.
+- Finland uses the nationwide Finnish psychological-autopsy literature (Heikkinen and colleagues) as its country evidence base.
+- Canada uses Canadian coroner/medical-examiner evidence, especially Quan & Arboleda-Flórez's Alberta age-55+ study and Houle et al.'s Montréal coroner profile.
+- The Finnish and some younger Canadian source variables are overlapping circumstances rather than mutually exclusive motives. Those cells are therefore converted to relative evidence weights and normalized for one display roll. The JSON records the provenance and modelling status of each cell.
+- `FI_CA_REFERENCE` is an equal 50/50 average of the already-normalized Finnish and Canadian sex/age cells. It is a transparent fallback for future countries without native context data, not a claim that Finnish/Canadian circumstances describe that country.
+
+Key references:
+
+- Heikkinen M, Aro H, Lönnqvist J. *Recent life events, social support and suicide*. Acta Psychiatr Scand Suppl. 1994;377:65-72. https://doi.org/10.1111/j.1600-0447.1994.tb05805.x
+- Heikkinen ME, Isometsä ET, Aro HM, Sarna SJ, Lönnqvist JK. *Age-related variation in recent life events preceding suicide*. J Nerv Ment Dis. 1995;183(5):325-331. https://pubmed.ncbi.nlm.nih.gov/7745388/
+- Heikkinen ME, Lönnqvist JK. *Recent Life Events in Elderly Suicide: A Nationwide Study in Finland*. Int Psychogeriatr. 1995. https://pubmed.ncbi.nlm.nih.gov/8829434/
+- Quan H, Arboleda-Flórez J. *Elderly Suicide in Alberta: Difference by Gender*. Can J Psychiatry. 1999;44:762-768. https://doi.org/10.1177/070674379904400801
+- Houle J et al. *Coroners' records on suicide mortality in Montréal: limitations and implications in suicide prevention strategies*. Chronic Diseases and Injuries in Canada. 2014;34(1). https://www.canada.ca/en/public-health/services/reports-publications/health-promotion-chronic-disease-prevention-canada-research-policy-practice/vol-34-no-1-2014/coroners-records-suicide-mortality-montreal-limitations-implications-suicide-prevention-strategies.html

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated": "2026-08-09",
+  "generated": "2026-08-10",
   "notes": [
     "Bundled snapshots are runtime defaults only where coverage exists.",
     "Explicit cache paths and refresh/download paths remain supported.",
@@ -37,8 +37,8 @@
       "url": "https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/",
       "license": "CC BY 4.0",
       "attribution": "Statistics Finland, causes of death; StatFin detailed cause tables.",
-      "sha256": "605c837351239f1b9372f790d420e95be05b2299c8ab69ef14a03ac3eccd4395",
-      "bytes": 360613
+      "sha256": "d1677fc071702c5099d1bad115d64cbb83964d73c5cf8b88757696fa1a8932d0",
+      "bytes": 367804
     },
     {
       "path": "datasets/finland/seasonality/statfin_11bf_through_2024.json",
@@ -105,6 +105,17 @@
       "attribution": "International Classification of Diseases Tenth Revision (ICD-10), Sixth Edition, 2019. Geneva: World Health Organization; 2019.",
       "sha256": "95a4daec55f80853c683d2bedefd56518e09838bea8d6f78587d2cfd7d9d5456",
       "bytes": 784118
+    },
+    {
+      "path": "datasets/suicide/suicide_reason_model_v1.json",
+      "agency": "Mortality Roulette evidence model (Finnish + Canadian published studies)",
+      "source": "Suicide statistical-reason/context model v1",
+      "reference": "Finnish 1987-1988 psychological autopsy; Alberta 1984-1995; Montreal 2007-2009",
+      "url": "datasets/README.md",
+      "license": "Project-authored derived model; source publications retain their respective rights",
+      "attribution": "See datasets/README.md and the embedded sources array in the JSON.",
+      "sha256": "69b6b9388f98616fab1b4493fbaed91e9549c393c189463f3d5e9b1d16ed8f8c",
+      "bytes": 33363
     }
   ]
 }

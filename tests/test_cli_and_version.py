@@ -23,14 +23,14 @@ class VersionCliTests(unittest.TestCase):
     def test_short_version_flag(self) -> None:
         result = self._version("-v")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "Mortality Roulette v0.13.0")
+        self.assertEqual(result.stdout.strip(), "Mortality Roulette v0.13.1")
         self.assertEqual(result.stderr, "")
         self.assertNotIn("starting", result.stdout.casefold())
 
     def test_long_version_flag(self) -> None:
         result = self._version("--version")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "Mortality Roulette v0.13.0")
+        self.assertEqual(result.stdout.strip(), "Mortality Roulette v0.13.1")
         self.assertEqual(result.stderr, "")
 
 

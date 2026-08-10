@@ -96,6 +96,8 @@ from collections import Counter
 from itertools import product
 from pathlib import Path
 
+from mortality_roulette_core.suicide_reasons import SuicideReasonModel
+
 from mortality_roulette_core.terminal import (
     terminal_display_width as _terminal_display_width,
     terminal_emphasis as _terminal_emphasis,
@@ -105,7 +107,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.0"
+VERSION = "0.13.1"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -119,6 +121,8 @@ BUNDLED_STATCAN_LIFE_TABLE_BC = DATASETS_ROOT / "canada" / "mortality" / "statca
 BUNDLED_STATCAN_SEASONAL = DATASETS_ROOT / "canada" / "seasonality" / "statcan_13100708_2024.json"
 BUNDLED_STATCAN_SEASONAL_BC = DATASETS_ROOT / "canada" / "seasonality" / "statcan_13100708_2024_bc.json"
 BUNDLED_WHO_ICD_TITLES = DATASETS_ROOT / "who" / "icd10" / "who_icd10_titles_2019.json"
+BUNDLED_SUICIDE_REASON_MODEL = DATASETS_ROOT / "suicide" / "suicide_reason_model_v1.json"
+SUICIDE_REASON_MODEL = SuicideReasonModel.from_path(BUNDLED_SUICIDE_REASON_MODEL)
 
 MALE_BIRTH_SHARE = 0.512
 TAIL_CAP = 0.50
@@ -6149,6 +6153,26 @@ class CauseDetailResolver:
             return {"available": False, "reason": f"detail lookup failed: {exc}"}
 
 
+def print_suicide_reason(outcome: dict[str, object]) -> None:
+    """Print one conditional statistical-reason roll after a suicide cause hit."""
+    if not outcome.get("available"):
+        return
+    print()
+    print_country_section_heading("STATISTICAL REASON")
+    print(str(outcome.get("label", "unresolved")))
+    print(f"conditional model probability: {float(outcome.get('conditional_probability', 0.0)) * 100:.2f}%")
+    print(
+        f"reason model: {outcome.get('model_label', outcome.get('model_country', 'unknown'))} "
+        f"| {outcome.get('sex', 'unknown')} {outcome.get('age_group', 'unknown')}"
+    )
+    if outcome.get("fallback"):
+        requested = str(outcome.get("requested_country", "unknown"))
+        print(f"model basis: fallback for {requested} — {outcome.get('provenance', 'reference model')}")
+    else:
+        print(f"model basis: {outcome.get('provenance', 'country evidence model')}")
+    print("model note: statistical context roll, not an individual motive determination")
+
+
 def print_cause_detail(
     broad_outcome: dict[str, object],
     detail: dict[str, object],
@@ -7439,6 +7463,7 @@ def simulate(
     detail_rng: random.Random | None = None,
     deep_detail_resolver: WhoDeepDetailResolver | None = None,
     deep_detail_rng: random.Random | None = None,
+    suicide_reason_rng: random.Random | None = None,
     cause_detail_mode: str = "broad",
     seasonal_source: SeasonalTimingSource | None = None,
     seasonal_rng: random.Random | None = None,
@@ -7475,6 +7500,11 @@ def simulate(
                 "deep_cause_of_death",
                 "deep_cause_probability",
                 "deep_cause_source",
+                "suicide_reason",
+                "suicide_reason_probability",
+                "suicide_reason_model",
+                "suicide_reason_age_group",
+                "suicide_reason_fallback",
                 "death_month",
                 "death_month_probability",
                 "seasonal_index",
@@ -7747,6 +7777,18 @@ def simulate(
                     rng=deep_detail_rng,
                 )
 
+            suicide_reason_outcome = None
+            if died and suicide_reason_rng is not None:
+                suicide_reason_outcome = SUICIDE_REASON_MODEL.roll_for_cause_stack(
+                    country=ACTIVE_COUNTRY,
+                    sex=sex,
+                    age=age,
+                    rng=suicide_reason_rng,
+                    cause=cause_outcome,
+                    detail=detail_outcome,
+                    deep=deep_detail_outcome,
+                )
+
             seasonal_outcome = None
             if died and cause_outcome is not None and seasonal_source is not None:
                 if seasonal_rng is None:
@@ -7824,6 +7866,31 @@ def simulate(
                             if not deep_detail_outcome or not deep_detail_outcome.get("available")
                             else deep_detail_outcome["source"]
                         ),
+                        "suicide_reason": (
+                            ""
+                            if not suicide_reason_outcome or not suicide_reason_outcome.get("available")
+                            else suicide_reason_outcome["label"]
+                        ),
+                        "suicide_reason_probability": (
+                            ""
+                            if not suicide_reason_outcome or not suicide_reason_outcome.get("available")
+                            else suicide_reason_outcome["conditional_probability"]
+                        ),
+                        "suicide_reason_model": (
+                            ""
+                            if not suicide_reason_outcome or not suicide_reason_outcome.get("available")
+                            else suicide_reason_outcome["model_label"]
+                        ),
+                        "suicide_reason_age_group": (
+                            ""
+                            if not suicide_reason_outcome or not suicide_reason_outcome.get("available")
+                            else suicide_reason_outcome["age_group"]
+                        ),
+                        "suicide_reason_fallback": (
+                            ""
+                            if not suicide_reason_outcome or not suicide_reason_outcome.get("available")
+                            else bool(suicide_reason_outcome.get("fallback"))
+                        ),
                         "death_month": (
                             ""
                             if not seasonal_outcome or not seasonal_outcome.get("available")
@@ -7858,6 +7925,8 @@ def simulate(
                             tree=(cause_detail_mode == "tree"),
                             deep_detail=deep_detail_outcome,
                         )
+                    if suicide_reason_outcome is not None:
+                        print_suicide_reason(suicide_reason_outcome)
                     if seasonal_outcome is not None:
                         print_seasonal_timing(seasonal_outcome)
                 if ACTIVE_BOOZEHOUND:
@@ -8745,6 +8814,7 @@ def _preflight_deathmatch_country(
         "cause_rng": _deathmatch_rng(args.seed, country, 0x43415553, contestant_index=contestant_index),
         "detail_rng": _deathmatch_rng(args.seed, country, 0x44455441, contestant_index=contestant_index),
         "deep_rng": _deathmatch_rng(args.seed, country, 0x44454550, contestant_index=contestant_index),
+        "suicide_reason_rng": _deathmatch_rng(args.seed, country, 0x53554358, contestant_index=contestant_index),
         "seasonal_rng": _deathmatch_rng(args.seed, country, 0x53454153, contestant_index=contestant_index),
     }
     return ctx
@@ -8762,6 +8832,7 @@ def _deathmatch_roll_cause_stack(
     cause_outcome = None
     detail_outcome = None
     deep_outcome = None
+    suicide_reason_outcome = None
     seasonal_outcome = None
 
     cause_source = ctx.get("cause_source")
@@ -8800,6 +8871,16 @@ def _deathmatch_roll_cause_stack(
             rng=ctx["deep_rng"],
         )
 
+    suicide_reason_outcome = SUICIDE_REASON_MODEL.roll_for_cause_stack(
+        country=str(ctx.get("country", "")),
+        sex=sex,
+        age=age,
+        rng=ctx["suicide_reason_rng"],
+        cause=cause_outcome,
+        detail=detail_outcome,
+        deep=deep_outcome,
+    )
+
     seasonal_source = ctx.get("seasonal_source")
     if cause_outcome is not None and seasonal_source is not None:
         seasonal_outcome = seasonal_source.roll(
@@ -8813,6 +8894,7 @@ def _deathmatch_roll_cause_stack(
         "cause": cause_outcome,
         "detail": detail_outcome,
         "deep": deep_outcome,
+        "suicide_reason": suicide_reason_outcome,
         "seasonal": seasonal_outcome,
     }
 
@@ -8901,6 +8983,7 @@ def _print_deathmatch_final_card(
     cause_outcome = stack.get("cause")
     detail_outcome = stack.get("detail")
     deep_outcome = stack.get("deep")
+    suicide_reason_outcome = stack.get("suicide_reason")
     seasonal_outcome = stack.get("seasonal")
 
     if cause_outcome is not None:
@@ -8912,6 +8995,8 @@ def _print_deathmatch_final_card(
                 tree=(cause_detail_mode == "tree"),
                 deep_detail=deep_outcome,
             )
+        if suicide_reason_outcome is not None:
+            print_suicide_reason(suicide_reason_outcome)
         if seasonal_outcome is not None:
             print_seasonal_timing(seasonal_outcome)
     if ACTIVE_BOOZEHOUND:
@@ -8964,6 +9049,7 @@ def _deathmatch_compact_stats(
     cause = stack.get("cause") if isinstance(stack, dict) else None
     detail = stack.get("detail") if isinstance(stack, dict) else None
     deep = stack.get("deep") if isinstance(stack, dict) else None
+    suicide_reason = stack.get("suicide_reason") if isinstance(stack, dict) else None
     seasonal = stack.get("seasonal") if isinstance(stack, dict) else None
 
     rows: list[tuple[str, str]] = [("TAPPED OUT", f"age {age}")]
@@ -8988,6 +9074,11 @@ def _deathmatch_compact_stats(
     elif isinstance(detail, dict) and detail.get("available"):
         detail_text = str(detail.get("label", detail_text))
     rows.append(("DETAIL", detail_text))
+
+    if isinstance(suicide_reason, dict) and suicide_reason.get("available"):
+        rows.append(("REASON", str(suicide_reason.get("label", "unresolved"))))
+        model_label = str(suicide_reason.get("model_label", suicide_reason.get("model_country", "unknown")))
+        rows.append(("REASON MODEL", f"{model_label} | {suicide_reason.get('sex')} {suicide_reason.get('age_group')}"))
 
     if isinstance(seasonal, dict) and seasonal.get("available"):
         rows.append(("MONTH", str(seasonal.get("month_name", "unknown"))))
@@ -10398,6 +10489,10 @@ def main() -> int:
     deep_detail_rng = random.Random(
         None if args.seed is None else (args.seed ^ 0x4D494344)
     )
+    # Separate stream: suicide reason/context must not perturb mortality/cause/detail rolls.
+    suicide_reason_rng = random.Random(
+        None if args.seed is None else (args.seed ^ 0x53554358)
+    )
     # Separate stream: enabling month timing must not perturb mortality/cause rolls.
     seasonal_rng = random.Random(
         None if args.seed is None else (args.seed ^ 0x5EA50A11)
@@ -10699,6 +10794,7 @@ def main() -> int:
         detail_rng=detail_rng,
         deep_detail_resolver=deep_detail_resolver,
         deep_detail_rng=deep_detail_rng,
+        suicide_reason_rng=suicide_reason_rng,
         cause_detail_mode=cause_detail_mode,
         seasonal_source=seasonal_source,
         seasonal_rng=seasonal_rng,

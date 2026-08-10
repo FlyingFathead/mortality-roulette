@@ -1,0 +1,752 @@
+{
+  "schema_version": 1,
+  "model_id": "suicide-statistical-reason-v1",
+  "model_version": "2026-08-10",
+  "purpose": "Conditional statistical reason/context roll after an already-resolved suicide underlying cause. Does not affect mortality or suicide incidence.",
+  "probability_semantics": "Values are model-normalized probabilities for one displayed salient context. They are not individual motive determinations. Some source variables are overlapping life events/circumstances and some age/sex cells are evidence-shaped rather than direct cross-tabulations.",
+  "fallback_model": "FI_CA_REFERENCE",
+  "age_groups": [
+    {
+      "id": "15-19",
+      "min_age": 15,
+      "max_age": 19
+    },
+    {
+      "id": "20-29",
+      "min_age": 20,
+      "max_age": 29
+    },
+    {
+      "id": "30-39",
+      "min_age": 30,
+      "max_age": 39
+    },
+    {
+      "id": "40-49",
+      "min_age": 40,
+      "max_age": 49
+    },
+    {
+      "id": "50-64",
+      "min_age": 50,
+      "max_age": 64
+    },
+    {
+      "id": "65-74",
+      "min_age": 65,
+      "max_age": 74
+    },
+    {
+      "id": "75+",
+      "min_age": 75,
+      "max_age": null
+    }
+  ],
+  "categories": {
+    "physical_health": {
+      "label": "Physical illness / chronic pain / functional deterioration"
+    },
+    "mental_health": {
+      "label": "Mental illness / severe psychological distress"
+    },
+    "relationship_family": {
+      "label": "Relationship / separation / family conflict"
+    },
+    "job_unemployment": {
+      "label": "Job problems / unemployment / occupational loss"
+    },
+    "financial": {
+      "label": "Financial trouble / major economic strain"
+    },
+    "bereavement": {
+      "label": "Bereavement / loss of a close person"
+    },
+    "legal": {
+      "label": "Legal / criminal-justice trouble"
+    },
+    "other": {
+      "label": "Other recorded life stressor"
+    },
+    "unresolved": {
+      "label": "No specific precipitating context resolved"
+    }
+  },
+  "models": {
+    "FI": {
+      "label": "Finland",
+      "provenance": "Finnish nationwide psychological-autopsy evidence model",
+      "profiles": {
+        "male": {
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.049551874619,
+              "mental_health": 0.0,
+              "relationship_family": 0.427797850875,
+              "job_unemployment": 0.094974426353,
+              "financial": 0.054394444184,
+              "bereavement": 0.074177654732,
+              "legal": 0.0,
+              "other": 0.099103749237,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.047261009667,
+              "mental_health": 0.0,
+              "relationship_family": 0.295085929108,
+              "job_unemployment": 0.244575725027,
+              "financial": 0.088936627282,
+              "bereavement": 0.059693877551,
+              "legal": 0.0,
+              "other": 0.064446831364,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.062234794908,
+              "mental_health": 0.0,
+              "relationship_family": 0.23026874116,
+              "job_unemployment": 0.286280056577,
+              "financial": 0.112234794908,
+              "bereavement": 0.052404526167,
+              "legal": 0.0,
+              "other": 0.05657708628,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.080126335557,
+              "mental_health": 0.0,
+              "relationship_family": 0.194556758526,
+              "job_unemployment": 0.299472179146,
+              "financial": 0.117799371168,
+              "bereavement": 0.053413763178,
+              "legal": 0.0,
+              "other": 0.054631592426,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.139757806075,
+              "mental_health": 0.0,
+              "relationship_family": 0.166211962225,
+              "job_unemployment": 0.275522531976,
+              "financial": 0.108017356286,
+              "bereavement": 0.056039250163,
+              "legal": 0.0,
+              "other": 0.054451093276,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.280285207572,
+              "mental_health": 0.0,
+              "relationship_family": 0.176770784321,
+              "job_unemployment": 0.102558905498,
+              "financial": 0.077918129502,
+              "bereavement": 0.092974772884,
+              "legal": 0.0,
+              "other": 0.069492200224,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.387323943662,
+              "mental_health": 0.0,
+              "relationship_family": 0.155252347418,
+              "job_unemployment": 0.029694835681,
+              "financial": 0.048591549296,
+              "bereavement": 0.108714788732,
+              "legal": 0.0,
+              "other": 0.070422535211,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          }
+        },
+        "female": {
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.057363246238,
+              "mental_health": 0.0,
+              "relationship_family": 0.405193112065,
+              "job_unemployment": 0.081264598838,
+              "financial": 0.046542452061,
+              "bereavement": 0.094910098321,
+              "legal": 0.0,
+              "other": 0.114726492477,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.056801678231,
+              "mental_health": 0.0,
+              "relationship_family": 0.290172664192,
+              "job_unemployment": 0.217266419235,
+              "financial": 0.079005970631,
+              "bereavement": 0.079296433758,
+              "legal": 0.0,
+              "other": 0.077456833952,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.075471698113,
+              "mental_health": 0.0,
+              "relationship_family": 0.228473413379,
+              "job_unemployment": 0.256603773585,
+              "financial": 0.100600343053,
+              "bereavement": 0.070240137221,
+              "legal": 0.0,
+              "other": 0.068610634648,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.096917967338,
+              "mental_health": 0.0,
+              "relationship_family": 0.192541859545,
+              "job_unemployment": 0.267735884772,
+              "financial": 0.10531568894,
+              "bereavement": 0.071408167128,
+              "legal": 0.0,
+              "other": 0.066080432276,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.165485744988,
+              "mental_health": 0.0,
+              "relationship_family": 0.161026226535,
+              "job_unemployment": 0.241136371268,
+              "financial": 0.094536418281,
+              "bereavement": 0.073340273347,
+              "legal": 0.0,
+              "other": 0.06447496558,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.306924022036,
+              "mental_health": 0.0,
+              "relationship_family": 0.158376600214,
+              "job_unemployment": 0.083008996869,
+              "financial": 0.063065276842,
+              "bereavement": 0.112528239071,
+              "legal": 0.0,
+              "other": 0.076096864968,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.406216340976,
+              "mental_health": 0.0,
+              "relationship_family": 0.133220495461,
+              "job_unemployment": 0.023018925989,
+              "financial": 0.037667333436,
+              "bereavement": 0.126019387598,
+              "legal": 0.0,
+              "other": 0.073857516541,
+              "unresolved": 0.2
+            },
+            "provenance": "Finnish nationwide psychological-autopsy life-event frequencies with sex/age evidence shaping; model-normalized single-context roll"
+          }
+        }
+      }
+    },
+    "CA": {
+      "label": "Canada",
+      "provenance": "Canadian coroner/medical-examiner evidence model",
+      "profiles": {
+        "male": {
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.214218406593,
+              "mental_health": 0.134563186813,
+              "relationship_family": 0.124874746222,
+              "job_unemployment": 0.023472696658,
+              "financial": 0.104402472527,
+              "bereavement": 0.078868260771,
+              "legal": 0.071356997841,
+              "other": 0.021594880926,
+              "unresolved": 0.226648351648
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.37043543956,
+              "mental_health": 0.13610989011,
+              "relationship_family": 0.083853090458,
+              "job_unemployment": 0.015761859109,
+              "financial": 0.05181456044,
+              "bereavement": 0.052959846605,
+              "legal": 0.04791605169,
+              "other": 0.01450091038,
+              "unresolved": 0.226648351648
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.466331043956,
+              "mental_health": 0.053361263736,
+              "relationship_family": 0.098934581547,
+              "job_unemployment": 0.018596725855,
+              "financial": 0.0,
+              "bereavement": 0.062484998872,
+              "legal": 0.056534046599,
+              "other": 0.017108987786,
+              "unresolved": 0.226648351648
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.045794585658,
+              "mental_health": 0.397437487084,
+              "relationship_family": 0.099882895915,
+              "job_unemployment": 0.014052490184,
+              "financial": 0.07560790797,
+              "bereavement": 0.035268994971,
+              "legal": 0.083460770132,
+              "other": 0.048494868086,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.051043736144,
+              "mental_health": 0.318401428119,
+              "relationship_family": 0.080158935821,
+              "job_unemployment": 0.037591776799,
+              "financial": 0.135440960525,
+              "bereavement": 0.033169214822,
+              "legal": 0.107339264634,
+              "other": 0.036854683136,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.065082501201,
+              "mental_health": 0.282415763336,
+              "relationship_family": 0.068136914615,
+              "job_unemployment": 0.045752122604,
+              "financial": 0.167458749399,
+              "bereavement": 0.03246649223,
+              "legal": 0.104512201634,
+              "other": 0.034175254979,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.087692916502,
+              "mental_health": 0.253686848701,
+              "relationship_family": 0.061205645693,
+              "job_unemployment": 0.049513256826,
+              "financial": 0.182012927054,
+              "bereavement": 0.033768632107,
+              "legal": 0.09835114101,
+              "other": 0.033768632107,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          }
+        },
+        "female": {
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.213541666667,
+              "mental_health": 0.298958333333,
+              "relationship_family": 0.086945730453,
+              "job_unemployment": 0.012274691358,
+              "financial": 0.01025,
+              "bereavement": 0.130930041152,
+              "legal": 0.037846965021,
+              "other": 0.063419238683,
+              "unresolved": 0.145833333333
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.2895625,
+              "mental_health": 0.313479166667,
+              "relationship_family": 0.057814429012,
+              "job_unemployment": 0.008162037037,
+              "financial": 0.03075,
+              "bereavement": 0.087061728395,
+              "legal": 0.025166280864,
+              "other": 0.042170524691,
+              "unresolved": 0.145833333333
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.3049375,
+              "mental_health": 0.313479166667,
+              "relationship_family": 0.061847993827,
+              "job_unemployment": 0.008731481481,
+              "financial": 0.0,
+              "bereavement": 0.093135802469,
+              "legal": 0.026922067901,
+              "other": 0.045112654321,
+              "unresolved": 0.145833333333
+            },
+            "provenance": "Alberta medical-examiner single-precipitant distribution; age-specific physical/mental/financial cells with sex-specific residual allocation; 50-64 uses the published 55-64 anchor"
+          },
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.043385516468,
+              "mental_health": 0.483835279656,
+              "relationship_family": 0.079540113525,
+              "job_unemployment": 0.007954011353,
+              "financial": 0.051628764597,
+              "bereavement": 0.046277884233,
+              "legal": 0.036472757511,
+              "other": 0.050905672656,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.052090115901,
+              "mental_health": 0.417528324001,
+              "relationship_family": 0.068758952989,
+              "job_unemployment": 0.022919650996,
+              "financial": 0.09962234666,
+              "bereavement": 0.04688110431,
+              "legal": 0.050527412423,
+              "other": 0.04167209272,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.068119891008,
+              "mental_health": 0.379836512262,
+              "relationship_family": 0.059945504087,
+              "job_unemployment": 0.028610354223,
+              "financial": 0.126331434233,
+              "bereavement": 0.047064651969,
+              "legal": 0.050458261085,
+              "other": 0.039633391132,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.092864881597,
+              "mental_health": 0.345209719858,
+              "relationship_family": 0.054480730537,
+              "job_unemployment": 0.031326420059,
+              "financial": 0.13892586287,
+              "bereavement": 0.049527936852,
+              "legal": 0.048042098746,
+              "other": 0.039622349482,
+              "unresolved": 0.2
+            },
+            "provenance": "Canadian evidence model: Montreal sex-specific coroner anchors plus age shaping and bridged physical/bereavement residuals; model-normalized"
+          }
+        }
+      }
+    },
+    "FI_CA_REFERENCE": {
+      "label": "Finnish-Canadian reference",
+      "provenance": "Equal-weight Finland/Canada reference fallback",
+      "profiles": {
+        "male": {
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.047673230138,
+              "mental_health": 0.198718743542,
+              "relationship_family": 0.263840373395,
+              "job_unemployment": 0.054513458268,
+              "financial": 0.065001176077,
+              "bereavement": 0.054723324852,
+              "legal": 0.041730385066,
+              "other": 0.073799308662,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.049152372905,
+              "mental_health": 0.159200714059,
+              "relationship_family": 0.187622432465,
+              "job_unemployment": 0.141083750913,
+              "financial": 0.112188793904,
+              "bereavement": 0.046431546187,
+              "legal": 0.053669632317,
+              "other": 0.05065075725,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.063658648055,
+              "mental_health": 0.141207881668,
+              "relationship_family": 0.149202827888,
+              "job_unemployment": 0.16601608959,
+              "financial": 0.139846772154,
+              "bereavement": 0.042435509199,
+              "legal": 0.052256100817,
+              "other": 0.04537617063,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.08390962603,
+              "mental_health": 0.12684342435,
+              "relationship_family": 0.127881202109,
+              "job_unemployment": 0.174492717986,
+              "financial": 0.149906149111,
+              "bereavement": 0.043591197642,
+              "legal": 0.049175570505,
+              "other": 0.044200112266,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.176988106334,
+              "mental_health": 0.067281593407,
+              "relationship_family": 0.145543354223,
+              "job_unemployment": 0.149497614317,
+              "financial": 0.106209914407,
+              "bereavement": 0.067453755467,
+              "legal": 0.03567849892,
+              "other": 0.038022987101,
+              "unresolved": 0.213324175824
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.325360323566,
+              "mental_health": 0.068054945055,
+              "relationship_family": 0.130311937389,
+              "job_unemployment": 0.059160382303,
+              "financial": 0.064866344971,
+              "bereavement": 0.072967309744,
+              "legal": 0.023958025845,
+              "other": 0.041996555302,
+              "unresolved": 0.213324175824
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.426827493809,
+              "mental_health": 0.026680631868,
+              "relationship_family": 0.127093464483,
+              "job_unemployment": 0.024145780768,
+              "financial": 0.024295774648,
+              "bereavement": 0.085599893802,
+              "legal": 0.028267023299,
+              "other": 0.043765761499,
+              "unresolved": 0.213324175824
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          }
+        },
+        "female": {
+          "15-19": {
+            "distribution": {
+              "physical_health": 0.050374381353,
+              "mental_health": 0.241917639828,
+              "relationship_family": 0.242366612795,
+              "job_unemployment": 0.044609305095,
+              "financial": 0.049085608329,
+              "bereavement": 0.070593991277,
+              "legal": 0.018236378756,
+              "other": 0.082816082566,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "20-29": {
+            "distribution": {
+              "physical_health": 0.054445897066,
+              "mental_health": 0.208764162,
+              "relationship_family": 0.179465808591,
+              "job_unemployment": 0.120093035116,
+              "financial": 0.089314158645,
+              "bereavement": 0.063088769034,
+              "legal": 0.025263706212,
+              "other": 0.059564463336,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "30-39": {
+            "distribution": {
+              "physical_health": 0.071795794561,
+              "mental_health": 0.189918256131,
+              "relationship_family": 0.144209458733,
+              "job_unemployment": 0.142607063904,
+              "financial": 0.113465888643,
+              "bereavement": 0.058652394595,
+              "legal": 0.025229130542,
+              "other": 0.05412201289,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "40-49": {
+            "distribution": {
+              "physical_health": 0.094891424468,
+              "mental_health": 0.172604859929,
+              "relationship_family": 0.123511295041,
+              "job_unemployment": 0.149531152416,
+              "financial": 0.122120775905,
+              "bereavement": 0.06046805199,
+              "legal": 0.024021049373,
+              "other": 0.052851390879,
+              "unresolved": 0.2
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "50-64": {
+            "distribution": {
+              "physical_health": 0.189513705827,
+              "mental_health": 0.149479166667,
+              "relationship_family": 0.123985978494,
+              "job_unemployment": 0.126705531313,
+              "financial": 0.052393209141,
+              "bereavement": 0.10213515725,
+              "legal": 0.01892348251,
+              "other": 0.063947102131,
+              "unresolved": 0.172916666667
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "65-74": {
+            "distribution": {
+              "physical_health": 0.298243261018,
+              "mental_health": 0.156739583333,
+              "relationship_family": 0.108095514613,
+              "job_unemployment": 0.045585516953,
+              "financial": 0.046907638421,
+              "bereavement": 0.099794983733,
+              "legal": 0.012583140432,
+              "other": 0.05913369483,
+              "unresolved": 0.172916666667
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          },
+          "75+": {
+            "distribution": {
+              "physical_health": 0.355576920488,
+              "mental_health": 0.156739583333,
+              "relationship_family": 0.097534244644,
+              "job_unemployment": 0.015875203735,
+              "financial": 0.018833666718,
+              "bereavement": 0.109577595034,
+              "legal": 0.013461033951,
+              "other": 0.059485085431,
+              "unresolved": 0.172916666667
+            },
+            "provenance": "50/50 average of Finland and Canada model probabilities for the same sex/age cell"
+          }
+        }
+      }
+    }
+  },
+  "sources": [
+    {
+      "id": "fi_heikkinen_aro_lonnqvist_1994",
+      "geography": "Finland",
+      "type": "nationwide psychological autopsy",
+      "reference": "1987-1988 suicide population",
+      "title": "Recent life events, social support and suicide",
+      "citation": "Acta Psychiatrica Scandinavica Supplement 377 (1994), 65-72",
+      "url": "https://doi.org/10.1111/j.1600-0447.1994.tb05805.x",
+      "observations": "Recent life events reported in 80%; job problems 28%, family discord 23%, somatic illness 22%, financial trouble 18%, unemployment 16%, separation 14%, death 13%, illness in family 12%. Separation, financial trouble, job problems and unemployment were more common among males."
+    },
+    {
+      "id": "fi_heikkinen_isometsa_aro_sarna_lonnqvist_1995",
+      "geography": "Finland",
+      "type": "nationwide psychological autopsy age analysis",
+      "reference": "1987-1988 suicide population",
+      "title": "Age-related variation in recent life events preceding suicide",
+      "citation": "Journal of Nervous and Mental Disease 183(5) (1995), 325-331",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/7745388/",
+      "observations": "Age-related life-event variation used to shape Finnish cells; working-age social/economic events decline in later life while somatic illness becomes more prominent."
+    },
+    {
+      "id": "fi_heikkinen_lonnqvist_1995",
+      "geography": "Finland",
+      "type": "nationwide psychological autopsy older-age analysis",
+      "reference": "1987-1988 suicide population",
+      "title": "Recent Life Events in Elderly Suicide: A Nationwide Study in Finland",
+      "citation": "International Psychogeriatrics 7(2) (1995)",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/8829434/",
+      "observations": "Compared with ages 20-59, age 60+ had more somatic illness; younger victims had more family discord, separation/death, financial trouble, job problems, unemployment and residence change. Somatic illness was especially important among older men."
+    },
+    {
+      "id": "ca_quan_arboleda_florez_1999",
+      "geography": "Canada (Alberta)",
+      "type": "medical examiner records",
+      "reference": "1984-1995, suicides age 55+ (n=920)",
+      "title": "Elderly Suicide in Alberta: Difference by Gender",
+      "citation": "Canadian Journal of Psychiatry 44 (1999), 762-768",
+      "url": "https://doi.org/10.1177/070674379904400801",
+      "observations": "Single precipitant stressor categories by sex; Table 4 gives age 55-64/65-74/75+ physical illness, mental illness and financial difficulty. Clear precipitant stressor absent in 14.6% of female and 22.7% of male cases."
+    },
+    {
+      "id": "ca_houle_2014_montreal",
+      "geography": "Canada (Montreal, Quebec)",
+      "type": "coroner records",
+      "reference": "2007-2009, n=566",
+      "title": "Coroners' records on suicide mortality in Montreal: limitations and implications in suicide prevention strategies",
+      "citation": "Chronic Diseases and Injuries in Canada 34(1) (2014)",
+      "url": "https://www.canada.ca/en/public-health/services/reports-publications/health-promotion-chronic-disease-prevention-canada-research-policy-practice/vol-34-no-1-2014/coroners-records-suicide-mortality-montreal-limitations-implications-suicide-prevention-strategies.html",
+      "observations": "Sex-specific Canadian anchors: financial problems 25.5% female/39.2% male; at least one mental disorder 69.7%/60.1%; conjugal separation 11.0%/14.5%; job loss 5.5%/10.2%; criminal record 9.7%/23.3%. Variables overlap and missingness varies."
+    }
+  ],
+  "modelling_notes": [
+    "Finland source event percentages overlap; they are converted to relative weights, sex/age-shaped, normalized within the 80% with a reported recent life event, and retain a 20% unresolved bucket.",
+    "Canada age 50-64/65-74/75+ uses the Alberta study. Published age-specific physical/mental/financial percentages are retained within the known-stressor distribution; the residual is allocated in the sex-specific proportions of the other Alberta stressor categories. The published 55-64 cell is used as the 50-64 gameplay bracket.",
+    "Canadian age groups below 50 use Montreal sex-specific coroner variables as relative anchors. Because those variables are overlapping and not age-cross-tabulated, age shaping is explicitly model-derived and the cell provenance says so.",
+    "FI_CA_REFERENCE is an equal 50/50 average of the already-normalized Finnish and Canadian probabilities, not population-weighted. It is intended only as a transparent fallback for future countries/cells without native data."
+  ]
+}
