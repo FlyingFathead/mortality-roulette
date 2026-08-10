@@ -102,3 +102,17 @@ Key references:
 - Transport Canada. *Canadian Motor Vehicle Traffic Collision Statistics: 2023*. https://tc.canada.ca/en/road-transportation/statistics-data/canadian-motor-vehicle-traffic-collision-statistics/2023/canadian-motor-vehicle-traffic-collision-statistics-2023
 - Ahtiluoto et al. *Impact of specialist palliative care on utilization of healthcare and social services at the end-of-life: a nationwide register-based cohort study*. Eur J Public Health. 2025. https://doi.org/10.1093/eurpub/ckaf044
 - Canadian Institute for Health Information. *End-of-Life Hospital Care for Cancer Patients*. 2013. https://publications.gc.ca/collections/collection_2013/icis-cihi/H117-5-22-2013-eng.pdf
+
+### Finnish F10 subtype classification context
+
+- Public Statistics Finland cause-of-death table **11be** publishes underlying causes at the ICD-10 **3-character level**, so an underlying-cause result such as `F10` cannot be assigned an empirical `F10.x` probability distribution from that table.
+- Statistics Finland's methodological documentation states that the source cause-of-death data are classified at the **most accurate ICD-10 level**, while underlying causes are published at 3-character level. This means finer coding is a public-access/resolution limitation rather than an absence from the underlying register.
+- `v0.13.4` therefore treats lower `F10` codes as **taxonomy/context only** unless an empirical complete-code mortality backend supplies a resolved subtype. It never normalizes clinical or registry-association counts into mortality probabilities.
+- WHO ICD-10 supplies the fourth-character clinical-state scheme (`F10.0` intoxication, `.1` harmful use, `.2` dependence, `.3` withdrawal, `.4` withdrawal with delirium, etc.). Finland's national ICD-10 documentation maintained through THL/Kanta further refines withdrawal and withdrawal-delirium categories by seizure/convulsion status (for example `F10.31` and `F10.41`).
+
+Primary references:
+
+- Statistics Finland. *Causes of death: documentation of statistics*. https://stat.fi/en/documentation/documentation-of-statistics/ksyyt
+- Statistics Finland. StatFin **11be — Deaths by underlying cause of death (ICD-10, 3-character level), age and sex**. https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/11be.px
+- Kanta Code Service / Finnish ICD-10 (THL-maintained classification), F10-F19 substance-use disorders and Finnish fifth-character refinements. https://koodistopalvelu.kanta.fi/codeserver/
+- WHO ICD-10 browser, 2019. https://icd.who.int/browse10/2019/en

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.4
+
+- Fixed the explanatory ICD subtype context so StatFin 11bx labels that place the code at the end, such as `Mental and behavioural disorders due to use of alcohol (F10)`, are recognized. Broad ICD ranges remain rejected as resolved leaf codes.
+- For unresolved Finnish `F10` deaths, the final card now exposes the legitimate WHO fourth-character clinical-state taxonomy and selected Finnish fifth-character withdrawal/delirium refinements (including seizure status) as **classification context only**. No subtype is randomly selected because public StatFin mortality tables publish underlying causes only at the 3-character level.
+- Clarified the boozehound exposure summary from `continuous exposure` to `ongoing modeled exposure`, reflecting that the configured g/day value is an annualized/habitual exposure intensity rather than a day-by-day consumption schedule.
+- Added regression tests for parenthetical `F10`, range rejection, Finnish withdrawal taxonomy output, and version reporting.
+
 ## v0.13.3
 
 - Generalized the existing X80 location feature into a reusable downstream **PLACE** layer while preserving all existing X80 source weights, fallbacks and RNG behavior. Deathmatch now presents X80 through `PLACE` / `PLACE MODEL`.

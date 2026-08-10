@@ -109,7 +109,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.3"
+VERSION = "0.13.4"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -3306,7 +3306,7 @@ def print_boozehound_exposure_summary(
     print_country_section_heading(f"{label} EXPOSURE")
     if ACTIVE_BOOZEHOUND_END_AGE is None or age < ACTIVE_BOOZEHOUND_END_AGE:
         print(
-            f"continuous exposure by midpoint of fatal year: {years:.1f} years at "
+            f"ongoing modeled exposure by midpoint of fatal year: {years:.1f} years at "
             f"{ACTIVE_BOOZEHOUND_GRAMS_PER_DAY:.1f} g/day"
         )
     else:
@@ -4587,8 +4587,19 @@ def _alcohol_detail_age_label(age: int) -> str:
 
 
 def _leaf_icd_code(label: str) -> str | None:
-    match = re.match(r"^([A-Z][0-9]{2})(?:\s|$)", label.strip())
-    return match.group(1) if match else None
+    """Return a resolved 3-character ICD leaf from a display label.
+
+    StatFin labels are not uniform: some begin with the ICD token (``F11 ...``)
+    while alcohol table 11bx uses prose followed by ``(F10)``.  Accept either
+    form, but reject broad ranges such as ``F10-F19`` so a classification
+    boundary is never mistaken for one resolved death code.
+    """
+    text = label.strip().upper()
+    if re.search(r"[A-Z][0-9]{2}\s*[-–]\s*[A-Z][0-9]{2}", text):
+        return None
+    tokens = re.findall(r"(?<![A-Z0-9])([A-Z][0-9]{2})(?![A-Z0-9])", text)
+    unique = list(dict.fromkeys(tokens))
+    return unique[0] if len(unique) == 1 else None
 
 
 # ---------------------------------------------------------------------------
@@ -4641,20 +4652,34 @@ def icd_subtype_context(label: str) -> dict[str, object] | None:
 
     if re.fullmatch(r"F1[0-9]", code):
         children = [(f"{code}.{suffix}", desc) for suffix, desc in _SUBSTANCE_USE_4CHAR]
-        return {
+        context = {
             "code": code,
             "children": children,
-            "source": "WHO ICD-10 fourth-character clinical-state classification",
+            "source": "WHO ICD-10 fourth-character clinical-state classification; Finland ICD-10 maintained by THL/Kanta",
             "note": (
-                "classification context only; StatFin 11be stops at 3 characters, "
-                "so these subtypes have no age/sex/year weights in the public data "
-                "and are not rolled"
+                "classification context only; Statistics Finland records causes at the most accurate ICD-10 level "
+                "but publishes underlying causes at 3 characters in public StatFin tables, so these subtypes "
+                "have no public age/sex/year death weights and are not rolled"
             ),
             "applicability_note": (
                 "not every fourth-character modifier is necessarily applicable to "
                 "every substance category"
             ),
         }
+        if code == "F10":
+            context["finland_extensions"] = (
+                ("F10.30", "Alcohol withdrawal state, uncomplicated"),
+                ("F10.31", "Alcohol withdrawal state with convulsions"),
+                ("F10.39", "Alcohol withdrawal state, other/unspecified"),
+                ("F10.40", "Alcohol withdrawal delirium without convulsions"),
+                ("F10.41", "Alcohol withdrawal delirium with convulsions"),
+                ("F10.49", "Alcohol withdrawal delirium, no information on convulsions"),
+            )
+            context["finland_extension_note"] = (
+                "Finnish ICD-10 uses fifth-character refinements for withdrawal and withdrawal delirium; "
+                "these are taxonomy only here because public StatFin mortality tables do not expose death counts at that level"
+            )
+        return context
 
     if code in {"F70", "F71", "F72", "F73", "F78", "F79"}:
         children = [(f"{code}.{suffix}", desc) for suffix, desc in _INTELLECTUAL_DISABILITY_4CHAR]
@@ -4687,6 +4712,11 @@ def print_icd_subtype_context(detail: dict[str, object]) -> None:
     print(f"resolution note: {context['note']}")
     if context.get("applicability_note"):
         print(f"classification note: {context['applicability_note']}")
+    if context.get("finland_extensions"):
+        print("Finnish ICD-10 withdrawal refinements (taxonomy only; not probability-weighted):")
+        for code, description in context["finland_extensions"]:
+            print(f"  {code} {description}")
+        print(f"Finland coding note: {context['finland_extension_note']}")
 
 
 _EXTERNAL_CLASS_PREFIX_RE = re.compile(
