@@ -128,7 +128,7 @@ class AlcoholCalibrationCliTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("MORTALITY ROULETTE v0.13.4 - ALCOHOL CALIBRATION", result.stdout)
+        self.assertIn("MORTALITY ROULETTE v0.13.5 - ALCOHOL CALIBRATION", result.stdout)
         self.assertIn("Wood highest-group modeled loss: 1.25 years", result.stdout)
         self.assertIn("target ~4-5 years", result.stdout)
         self.assertIn("UNDER", result.stdout)

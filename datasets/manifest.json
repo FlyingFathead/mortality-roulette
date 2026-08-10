@@ -132,12 +132,12 @@
       "path": "datasets/places/cause_place_model_v1.json",
       "agency": "Mortality Roulette evidence model (Finnish and Canadian official/published sources)",
       "source": "Cause-conditional PLACE model v1",
-      "reference": "FI/CA drowning; FI homicide; FI/CA road traffic; FI/CA cancer; FI neurodegenerative",
+      "reference": "FI/CA drowning; FI homicide; FI/CA road traffic; FI/CA cancer; FI neurodegenerative; FI youth drug poisoning; CA accidental acute toxicity; FI/CA fire",
       "url": "datasets/README.md",
       "license": "Project-authored derived model; source publications/data retain their respective rights",
       "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
-      "sha256": "014dfb4127e12342f471f134bc4625f598bf89a6af62b0e456bdefe9f71502ab",
-      "bytes": 15308
+      "sha256": "5764e087e84a514e7a1c747578b2d46616fed021c17800370b6f3ef72458b36a",
+      "bytes": 27199
     }
   ]
 }

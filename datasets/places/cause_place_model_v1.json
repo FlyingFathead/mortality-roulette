@@ -1,10 +1,270 @@
 {
   "schema_version": 1,
   "model_id": "cause-place-v1",
-  "model_version": "2026-08-11",
-  "purpose": "Independent downstream PLACE rolls conditioned on already-resolved cause/detail. Event setting and terminal place are kept semantically distinct in metadata but rendered through one compact PLACE field.",
+  "model_version": "2026-08-11-v0.13.5",
+  "purpose": "Independent downstream PLACE rolls conditioned on already-resolved cause/detail, including age/sex-conditioned toxicology settings where published evidence supports them. Event setting and terminal place are kept semantically distinct in metadata but rendered through one compact PLACE field.",
   "probability_semantics": "Each distribution is conditional on the trigger cause and country/profile shown. Source counts/percentages are normalized only within the stated source population. PLACE never changes mortality, cause, cause detail, suicide context, X80 location, X41 drug class, or seasonality.",
   "contexts": {
+    "FI_YOUTH_DRUG_POISONING_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "X40-X44",
+          "X60-X64",
+          "Y10-Y14"
+        ],
+        "label_contains": [
+          "drug poisoning",
+          "poisoning by and exposure to antiepileptic",
+          "poisoning by and exposure to narcotics",
+          "poisoning by and exposure to psychotropic"
+        ]
+      },
+      "categories": {
+        "own_home": "Own residence",
+        "friend_acquaintance_home": "Friend / new acquaintance residence",
+        "parent_relative_home": "Parent / relative residence",
+        "supported_housing": "Supported housing / hostel",
+        "hospital": "Hospital",
+        "outdoors": "Outdoors",
+        "hotel_room": "Hotel room",
+        "other": "Other (including vehicle / police custody)"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | under-30 drug-poisoning death setting",
+          "age_groups": [
+            {
+              "min_age": 15,
+              "max_age": 29,
+              "profile_label": "age 15-29",
+              "distribution": {
+                "own_home": 124,
+                "friend_acquaintance_home": 117,
+                "parent_relative_home": 17,
+                "supported_housing": 14,
+                "hospital": 9,
+                "outdoors": 5,
+                "hotel_room": 5,
+                "other": 9
+              },
+              "provenance": "THL Tutkimuksesta tiiviisti 24/2024, Table 3: event/death settings for 300 Finnish drug-poisoning deaths among people under 30 in 2019-2021. Counts used directly. The source population pools manner of death (86.7% accidental, 5.0% suicide, 8.3% undetermined); the youngest observed decedent was 15, so the model is intentionally limited to ages 15-29.",
+              "model_status": "Finland-native forensic under-30 drug-poisoning distribution; pooled manner of death"
+            }
+          ],
+          "source_period": "2019-2021"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "sources": [
+        {
+          "title": "Nuorten huumemyrkytyskuolemien olosuhteet – Näkökulmia ehkäisyyn",
+          "authors": "Rönkä, Konttinen, Häkkinen & Karjalainen",
+          "publisher": "Finnish Institute for Health and Welfare (THL)",
+          "year": 2024,
+          "url": "https://www.julkari.fi/bitstreams/799c2104-b74f-44b5-8c63-8f8472f8f130/download",
+          "use": "Table 3, event/death setting counts for 300 Finnish under-30 drug-poisoning deaths, 2019-2021"
+        }
+      ]
+    },
+    "CA_ACCIDENTAL_TOXICITY_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "X40-X44",
+          "X46-X49"
+        ],
+        "exclude_label_contains": [
+          "alcohol"
+        ]
+      },
+      "categories": {
+        "personal_residence": "Personal residence",
+        "home_of_another": "Home of another person",
+        "other": "Other location"
+      },
+      "models": {
+        "CA": {
+          "label": "Canada | accidental acute-toxicity event setting",
+          "profiles": {
+            "female": {
+              "age_groups": [
+                {
+                  "min_age": 12,
+                  "max_age": 24,
+                  "profile_label": "female 12-24",
+                  "distribution": {
+                    "personal_residence": 59,
+                    "home_of_another": 16,
+                    "other": 23
+                  },
+                  "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017, Table 2: female youth accidental acute-toxicity event place, published percentages 59% personal residence, 16% home of another, 23% other. Percentages are normalized for publication/random-rounding totals.",
+                  "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+                },
+                {
+                  "min_age": 25,
+                  "max_age": 59,
+                  "profile_label": "female 25-59",
+                  "distribution": {
+                    "personal_residence": 70,
+                    "home_of_another": 10,
+                    "other": 20
+                  },
+                  "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017, Table 2: female adult accidental acute-toxicity event place, 70% personal residence, 10% home of another, 20% other.",
+                  "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+                }
+              ]
+            },
+            "male": {
+              "age_groups": [
+                {
+                  "min_age": 12,
+                  "max_age": 24,
+                  "profile_label": "male 12-24",
+                  "distribution": {
+                    "personal_residence": 61,
+                    "home_of_another": 14,
+                    "other": 25
+                  },
+                  "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017, Table 2: male youth accidental acute-toxicity event place, 61% personal residence, 14% home of another, 25% other.",
+                  "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+                },
+                {
+                  "min_age": 25,
+                  "max_age": 59,
+                  "profile_label": "male 25-59",
+                  "distribution": {
+                    "personal_residence": 62,
+                    "home_of_another": 9,
+                    "other": 29
+                  },
+                  "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017, Table 2: male adult accidental acute-toxicity event place, 62% personal residence, 9% home of another, 29% other.",
+                  "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+                },
+                {
+                  "min_age": 60,
+                  "max_age": 130,
+                  "profile_label": "male 60+",
+                  "distribution": {
+                    "personal_residence": 77,
+                    "home_of_another": 5,
+                    "other": 18
+                  },
+                  "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017, Table 2: male older-adult accidental acute-toxicity event place, 77% personal residence, 5% home of another, 18% other.",
+                  "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+                }
+              ]
+            }
+          },
+          "source_period": "2016-2017",
+          "provenance": "PHAC national retrospective chart review of coroner and medical examiner files. Counts were randomly rounded to base 3; reported percentages are used and normalized within each complete published profile. Female age 60+ is intentionally not modeled because the home-of-another category is suppressed, preventing a complete distribution.",
+          "model_status": "Canada-native national accidental acute-toxicity distribution by sex and life stage"
+        }
+      },
+      "country_model_map": {
+        "CA": "CA"
+      },
+      "sources": [
+        {
+          "title": "A comparison of the characteristics of accidental substance-related acute toxicity deaths in Canada across life stages (2016 to 2017)",
+          "authors": "Chang et al.",
+          "publisher": "Public Health Agency of Canada",
+          "year": 2024,
+          "url": "https://www.canada.ca/en/public-health/services/reports-publications/health-promotion-chronic-disease-prevention-canada-research-policy-practice/vol-44-no-7-8-2024/comparison-characteristics-accidental-substance-related-acute-toxicity-deaths-canada-2016-2017.html",
+          "use": "Table 2, place of acute-toxicity event by sex and life stage"
+        }
+      ]
+    },
+    "FI_BUILDING_FIRE_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_exact": [
+          "X00",
+          "X01"
+        ]
+      },
+      "categories": {
+        "detached_house": "Detached house",
+        "block_of_flats": "Block of flats",
+        "row_house": "Row house",
+        "leisure_time_house": "Leisure-time house",
+        "rental_cottage": "Rental cottage",
+        "storage_building": "Storage / outbuilding",
+        "other_building": "Other building"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | fatal building-fire setting",
+          "distribution": {
+            "detached_house": 191,
+            "block_of_flats": 82,
+            "row_house": 30,
+            "leisure_time_house": 19,
+            "rental_cottage": 3,
+            "storage_building": 8,
+            "other_building": 10
+          },
+          "provenance": "Pelastusopisto fire-death investigation data, Appendix Table 16, 2007-2010: pooled counts by building type (39+53+60+39 detached; 17+28+19+18 flats; 4+9+11+6 row; 7+3+3+6 leisure; 2+0+0+1 rental cottage; 3+1+2+2 storage; 3+5+2+0 other), total 343 building-fire deaths. Source is Finland-native but pools fire intent; model is therefore used only as a building-type setting distribution after ICD X00/X01 has already resolved a building/structure fire.",
+          "model_status": "Finland-native building-fire setting distribution; pooled fire intent",
+          "source_period": "2007-2010"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "sources": [
+        {
+          "title": "Palokuolemat ja ihmisen pelastamiset tulipaloissa 2007–2010",
+          "authors": "Esa Kokki",
+          "publisher": "Pelastusopisto",
+          "year": 2011,
+          "url": "https://www.pelastusopisto.fi/wp-content/uploads/2016/12/B3_2011.pdf",
+          "use": "Appendix Table 16, fatal building-fire deaths by building type"
+        }
+      ]
+    },
+    "CA_UNINTENTIONAL_FIRE_EVENT_PLACE": {
+      "semantic": "event_setting",
+      "heading": "PLACE",
+      "trigger": {
+        "icd_ranges": [
+          "X00-X09"
+        ]
+      },
+      "categories": {
+        "residence_or_property": "Residence / residential property",
+        "other": "Other setting"
+      },
+      "models": {
+        "CA": {
+          "label": "Canada | unintentional fire-death setting",
+          "distribution": {
+            "residence_or_property": 92,
+            "other": 8
+          },
+          "provenance": "Statistics Canada Canadian Coroner and Medical Examiner Database analysis, 2011-2020: 92% of unintentional fire-related deaths occurred in someone's residence or on their property, including a vehicle parked in a driveway or garage; remaining 8% represented as an explicit residual other setting.",
+          "model_status": "Canada-native national unintentional fire-death setting distribution + explicit residual",
+          "source_period": "2011-2020"
+        }
+      },
+      "country_model_map": {
+        "CA": "CA"
+      },
+      "sources": [
+        {
+          "title": "Unintentional fire-related deaths in Canada, 2011 to 2020",
+          "publisher": "Statistics Canada",
+          "year": 2022,
+          "url": "https://www150.statcan.gc.ca/n1/pub/11-627-m/11-627-m2022035-eng.htm",
+          "use": "National CCMED statistic: 92% of unintentional fire-related deaths at a residence or residential property"
+        }
+      ]
+    },
     "DROWNING_EVENT_PLACE": {
       "semantic": "event_setting",
       "heading": "PLACE",
@@ -401,6 +661,10 @@
     }
   },
   "precedence": [
+    "FI_YOUTH_DRUG_POISONING_EVENT_PLACE",
+    "CA_ACCIDENTAL_TOXICITY_EVENT_PLACE",
+    "FI_BUILDING_FIRE_EVENT_PLACE",
+    "CA_UNINTENTIONAL_FIRE_EVENT_PLACE",
     "DROWNING_EVENT_PLACE",
     "HOMICIDE_EVENT_PLACE",
     "ROAD_TRAFFIC_EVENT_PLACE",

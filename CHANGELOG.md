@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.5
+
+- Expanded the evidence-backed **PLACE** layer with fatal drug/substance-poisoning settings. Finland uses THL forensic death-investigation counts for ages 15–29 and does not extrapolate them to older ages; the Finnish source pools manner of death and is labelled accordingly. Canada uses PHAC national coroner/medical-examiner accidental acute-toxicity distributions by sex and life stage.
+- Added fire-death PLACE models. Finnish `X00`/`X01` building/structure-fire deaths use pooled 2007–2010 Pelastusopisto building-type counts; other Finnish fire codes remain blank rather than being forced into a building model. Canadian `X00–X09` unintentional fire deaths use the national 2011–2020 CCMED residence/property share with an explicit residual other setting.
+- Extended PLACE model resolution to age-conditioned profiles without changing existing context distributions or RNG streams. Published gaps remain gaps: Canadian female accidental acute-toxicity deaths at age 60+ are intentionally not modeled because one event-place category is suppressed in the source table.
+- Grouped compact context presentation with `💊 DRUG CLASS` / indented drug metadata and `📍 PLACE` / indented place probability, roll and model metadata. Full result cards use the same semantic emoji headings and print drug class before PLACE when both exist.
+- Preserved existing X80 suicide-location probabilities/RNG, drowning constraints, homicide, road, cancer and neurodegenerative PLACE behavior; added regression coverage for age boundaries, intent boundaries, fire building constraints and the grouped rendering.
+
 ## v0.13.4
 
 - Fixed the explanatory ICD subtype context so StatFin 11bx labels that place the code at the end, such as `Mental and behavioural disorders due to use of alcohol (F10)`, are recognized. Broad ICD ranges remain rejected as resolved leaf codes.

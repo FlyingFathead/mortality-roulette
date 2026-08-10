@@ -14,15 +14,99 @@ class PlaceModelTests(unittest.TestCase):
                 model_key = context["country_model_map"][requested_country]
                 model = context["models"][model_key]
                 profiles = model.get("profiles")
-                sexes = profiles.keys() if isinstance(profiles, dict) else ["male"]
-                for sex in sexes:
-                    resolved = mr.PLACE_MODEL._resolve_distribution(
-                        context_id, country=requested_country, sex=sex
-                    )
-                    self.assertIsNotNone(resolved, (context_id, requested_country, sex))
-                    assert resolved is not None
-                    self.assertAlmostEqual(sum(resolved["distribution"].values()), 1.0, places=12)
-                    self.assertTrue(all(p > 0 for p in resolved["distribution"].values()))
+                if isinstance(profiles, dict):
+                    profile_cells = [(sex, cell) for sex, cell in profiles.items()]
+                else:
+                    profile_cells = [("male", model)]
+                for sex, cell in profile_cells:
+                    age_groups = cell.get("age_groups") if isinstance(cell, dict) else None
+                    if isinstance(age_groups, list):
+                        ages = [int(group["min_age"]) for group in age_groups]
+                    else:
+                        ages = [None]
+                    for age in ages:
+                        resolved = mr.PLACE_MODEL._resolve_distribution(
+                            context_id, country=requested_country, sex=sex, age=age
+                        )
+                        self.assertIsNotNone(resolved, (context_id, requested_country, sex, age))
+                        assert resolved is not None
+                        self.assertAlmostEqual(sum(resolved["distribution"].values()), 1.0, places=12)
+                        self.assertTrue(all(p > 0 for p in resolved["distribution"].values()))
+
+
+    def test_finland_under30_drug_poisoning_uses_forensic_place_counts(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="fi", sex="male", age=20, rng=random.Random(1),
+            detail={"available": True, "code": "X41", "label": "Accidental poisoning by psychotropic drugs"},
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["context_id"], "FI_YOUTH_DRUG_POISONING_EVENT_PLACE")
+        self.assertEqual(rolled["model_country"], "FI")
+        self.assertEqual(rolled["profile"], "age 15-29")
+        self.assertEqual(rolled["category"], "own_home")
+        self.assertAlmostEqual(rolled["conditional_probability"], 124 / 300)
+
+    def test_finland_under30_drug_poisoning_model_does_not_extrapolate_to_older_age(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="fi", sex="male", age=30, rng=random.Random(1),
+            detail={"available": True, "code": "X41", "label": "Accidental poisoning by psychotropic drugs"},
+        )
+        self.assertIsNone(rolled)
+
+    def test_canada_accidental_toxicity_place_is_age_and_sex_specific(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", age=35, rng=random.Random(1),
+            detail={"available": True, "code": "X41", "label": "Accidental poisoning by psychotropic drugs"},
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["context_id"], "CA_ACCIDENTAL_TOXICITY_EVENT_PLACE")
+        self.assertEqual(rolled["profile"], "male 25-59")
+        self.assertAlmostEqual(rolled["conditional_probability"], 0.62)
+
+    def test_canada_accidental_toxicity_does_not_fill_suppressed_older_female_profile(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="female", age=65, rng=random.Random(1),
+            detail={"available": True, "code": "X41", "label": "Accidental poisoning by psychotropic drugs"},
+        )
+        self.assertIsNone(rolled)
+
+    def test_canada_accidental_toxicity_model_does_not_apply_to_intentional_self_poisoning(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", age=35, rng=random.Random(1),
+            detail={"available": True, "code": "X61", "label": "Intentional self-poisoning by psychotropic drugs"},
+        )
+        self.assertIsNone(rolled)
+
+    def test_finland_building_fire_uses_observed_building_type_counts(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="fi", sex="male", age=55, rng=random.Random(1),
+            detail={"available": True, "code": "X00", "label": "Exposure to uncontrolled fire in building or structure"},
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["context_id"], "FI_BUILDING_FIRE_EVENT_PLACE")
+        self.assertEqual(rolled["category"], "detached_house")
+        self.assertAlmostEqual(rolled["conditional_probability"], 191 / 343)
+
+    def test_finland_nonbuilding_fire_is_not_forced_into_building_type_model(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="fi", sex="male", age=55, rng=random.Random(1),
+            detail={"available": True, "code": "X02", "label": "Exposure to controlled fire, not in building or structure"},
+        )
+        self.assertIsNone(rolled)
+
+    def test_canada_unintentional_fire_uses_national_residential_property_share(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="female", age=70, rng=random.Random(1),
+            detail={"available": True, "code": "X08", "label": "Exposure to other specified smoke, fire and flames"},
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["context_id"], "CA_UNINTENTIONAL_FIRE_EVENT_PLACE")
+        self.assertEqual(rolled["category"], "residence_or_property")
+        self.assertAlmostEqual(rolled["conditional_probability"], 0.92)
 
     def test_finland_drowning_uses_native_weighted_event_setting(self) -> None:
         rolled = mr.PLACE_MODEL.roll_for_cause_stack(
@@ -224,11 +308,49 @@ class PlaceRenderingTests(unittest.TestCase):
         finally:
             mr.ACTIVE_COUNTRY = old_country
             mr.ACTIVE_CANADA_PROVINCE = old_province
-        self.assertIn(("PLACE", "Bridge"), rows)
-        self.assertIn(("PLACE p", "40.00%"), rows)
-        self.assertIn(("PLACE ROLL", "25.0000%"), rows)
-        self.assertIn(("PLACE MODEL", "Canada"), rows)
+        self.assertIn(("📍 PLACE", "Bridge"), rows)
+        self.assertIn(("   PLACE p", "40.00%"), rows)
+        self.assertIn(("   PLACE ROLL", "25.0000%"), rows)
+        self.assertIn(("   PLACE MODEL", "Canada"), rows)
         self.assertNotIn(("LOCATION", "Bridge"), rows)
+
+    def test_compact_drug_and_place_rows_use_grouped_emoji_layout(self) -> None:
+        ctx = {"country": "ca", "province": None}
+        state = {
+            "death_age": 35, "q": 0.01, "baseline_q": 0.01, "mult": 1.0, "roll": 0.005,
+            "cause_stack": {
+                "cause": {"available": True, "label": "XX External causes"},
+                "detail": {"available": True, "label": "X41 Accidental poisoning"},
+                "deep": None, "x80_location": None,
+                "x41_drug_class": {
+                    "available": True, "label": "Benzodiazepines / sedative-hypnotics",
+                    "model_label": "Canada", "profile": "male",
+                },
+                "place": {
+                    "available": True, "label": "Personal residence",
+                    "model_label": "Canada | accidental acute-toxicity event setting",
+                    "profile": "male 25-59", "roll": 0.4, "conditional_probability": 0.62,
+                },
+                "suicide_reason": None, "seasonal": None,
+            },
+        }
+        old_country = mr.ACTIVE_COUNTRY
+        old_province = mr.ACTIVE_CANADA_PROVINCE
+        try:
+            rows = mr._deathmatch_compact_stats(ctx, state, sex="male", start_age=0)
+        finally:
+            mr.ACTIVE_COUNTRY = old_country
+            mr.ACTIVE_CANADA_PROVINCE = old_province
+        drug_i = rows.index(("💊 DRUG CLASS", "Benzodiazepines / sedative-hypnotics"))
+        self.assertEqual(rows[drug_i + 1], ("   DRUG MODEL", "Canada | male"))
+        place_i = rows.index(("📍 PLACE", "Personal residence"))
+        self.assertGreater(place_i, drug_i)
+        self.assertEqual(rows[place_i + 1], ("   PLACE p", "62.00%"))
+        self.assertEqual(rows[place_i + 2], ("   PLACE ROLL", "40.0000%"))
+        self.assertEqual(
+            rows[place_i + 3],
+            ("   PLACE MODEL", "Canada | accidental acute-toxicity event setting | male 25-59"),
+        )
 
 
 if __name__ == "__main__":

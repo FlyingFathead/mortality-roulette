@@ -109,7 +109,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.4"
+VERSION = "0.13.5"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -6214,7 +6214,10 @@ def print_external_context(outcome: dict[str, object]) -> None:
     if not outcome.get("available"):
         return
     print()
-    print_country_section_heading(str(outcome.get("heading", "CONTEXT")))
+    heading = str(outcome.get("heading", "CONTEXT"))
+    if heading == "DRUG CLASS":
+        heading = "💊 DRUG CLASS"
+    print_country_section_heading(heading)
     print(str(outcome.get("label", "unresolved")))
     print(f"conditional model probability: {float(outcome.get('conditional_probability', 0.0)) * 100:.2f}%")
     profile = outcome.get("profile")
@@ -6246,7 +6249,7 @@ def print_place_context(outcome: dict[str, object]) -> None:
     if not outcome.get("available"):
         return
     print()
-    print_country_section_heading("PLACE")
+    print_country_section_heading("📍 PLACE")
     print(str(outcome.get("label", "unresolved")))
     roll = outcome.get("roll")
     if isinstance(roll, (int, float)):
@@ -7929,6 +7932,7 @@ def simulate(
                 general_place_outcome = PLACE_MODEL.roll_for_cause_stack(
                     country=ACTIVE_COUNTRY,
                     sex=sex,
+                    age=age,
                     rng=place_rng,
                     cause=cause_outcome,
                     detail=detail_outcome,
@@ -8123,10 +8127,10 @@ def simulate(
                             tree=(cause_detail_mode == "tree"),
                             deep_detail=deep_detail_outcome,
                         )
-                    if place_outcome is not None:
-                        print_place_context(place_outcome)
                     if x41_drug_class_outcome is not None:
                         print_external_context(x41_drug_class_outcome)
+                    if place_outcome is not None:
+                        print_place_context(place_outcome)
                     if suicide_reason_outcome is not None:
                         print_suicide_reason(suicide_reason_outcome)
                     if seasonal_outcome is not None:
@@ -9111,6 +9115,7 @@ def _deathmatch_roll_cause_stack(
     general_place_outcome = PLACE_MODEL.roll_for_cause_stack(
         country=str(ctx.get("country", "")),
         sex=sex,
+        age=age,
         rng=ctx["place_rng"],
         cause=cause_outcome,
         detail=detail_outcome,
@@ -9241,10 +9246,10 @@ def _print_deathmatch_final_card(
                 tree=(cause_detail_mode == "tree"),
                 deep_detail=deep_outcome,
             )
-        if place_outcome is not None:
-            print_place_context(place_outcome)
         if x41_drug_class_outcome is not None:
             print_external_context(x41_drug_class_outcome)
+        if place_outcome is not None:
+            print_place_context(place_outcome)
         if suicide_reason_outcome is not None:
             print_suicide_reason(suicide_reason_outcome)
         if seasonal_outcome is not None:
@@ -9330,27 +9335,27 @@ def _deathmatch_compact_stats(
         detail_text = str(detail.get("label", detail_text))
     rows.append(("DETAIL", detail_text))
 
-    if isinstance(place, dict) and place.get("available"):
-        rows.append(("PLACE", str(place.get("label", "unresolved"))))
-        probability = place.get("conditional_probability")
-        if isinstance(probability, (int, float)):
-            rows.append(("PLACE p", f"{float(probability) * 100:.2f}%"))
-        roll_value = place.get("roll")
-        if isinstance(roll_value, (int, float)):
-            rows.append(("PLACE ROLL", f"{float(roll_value) * 100:.4f}%"))
-        model_label = str(place.get("model_label", place.get("model_country", "unknown")))
-        profile = place.get("profile")
-        if profile and profile != "all":
-            model_label = f"{model_label} | {profile}"
-        rows.append(("PLACE MODEL", model_label))
-
     if isinstance(x41_drug_class, dict) and x41_drug_class.get("available"):
-        rows.append(("DRUG CLASS", str(x41_drug_class.get("label", "unresolved"))))
+        rows.append(("💊 DRUG CLASS", str(x41_drug_class.get("label", "unresolved"))))
         model_label = str(x41_drug_class.get("model_label", x41_drug_class.get("model_country", "unknown")))
         profile = x41_drug_class.get("profile")
         if profile and profile != "all":
             model_label = f"{model_label} | {profile}"
-        rows.append(("DRUG MODEL", model_label))
+        rows.append(("   DRUG MODEL", model_label))
+
+    if isinstance(place, dict) and place.get("available"):
+        rows.append(("📍 PLACE", str(place.get("label", "unresolved"))))
+        probability = place.get("conditional_probability")
+        if isinstance(probability, (int, float)):
+            rows.append(("   PLACE p", f"{float(probability) * 100:.2f}%"))
+        roll_value = place.get("roll")
+        if isinstance(roll_value, (int, float)):
+            rows.append(("   PLACE ROLL", f"{float(roll_value) * 100:.4f}%"))
+        model_label = str(place.get("model_label", place.get("model_country", "unknown")))
+        profile = place.get("profile")
+        if profile and profile != "all":
+            model_label = f"{model_label} | {profile}"
+        rows.append(("   PLACE MODEL", model_label))
 
     if isinstance(suicide_reason, dict) and suicide_reason.get("available"):
         rows.append(("REASON", str(suicide_reason.get("label", "unresolved"))))
@@ -9515,7 +9520,7 @@ def _print_deathmatch_result_table(
     print(f"{header_labels[0]} │ {header_labels[1]}")
     print(_deathmatch_grid_rule(column_width, junction="┼"))
 
-    label_width = 12
+    label_width = max(12, max((_terminal_display_width(key) for key in row_order), default=12))
     for key in row_order:
         left_lines = _deathmatch_result_cell_lines(
             key, maps[0].get(key, "—"), column_width=column_width, label_width=label_width

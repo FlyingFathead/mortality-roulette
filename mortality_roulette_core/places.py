@@ -152,7 +152,9 @@ class PlaceModel:
             return "female"
         return value
 
-    def _resolve_distribution(self, context_id: str, *, country: str, sex: str) -> dict[str, Any] | None:
+    def _resolve_distribution(
+        self, context_id: str, *, country: str, sex: str, age: int | None = None
+    ) -> dict[str, Any] | None:
         context = dict(self.contexts.get(context_id, {}))
         if not context:
             return None
@@ -168,10 +170,35 @@ class PlaceModel:
         profiles = model.get("profiles")
         if isinstance(profiles, dict):
             sex_key = self._sex_key(sex)
-            profile_key = sex_key if sex_key in profiles else "all" if "all" in profiles else None
-            if profile_key is None:
+            sex_profile = sex_key if sex_key in profiles else "all" if "all" in profiles else None
+            if sex_profile is None:
                 return None
-            cell = dict(profiles[profile_key])
+            profile_key = sex_profile
+            cell = dict(profiles[sex_profile])
+
+        age_groups = cell.get("age_groups")
+        if isinstance(age_groups, list):
+            if age is None:
+                return None
+            selected = None
+            for candidate in age_groups:
+                if not isinstance(candidate, dict):
+                    continue
+                lo = int(candidate.get("min_age", -10**9))
+                hi = int(candidate.get("max_age", 10**9))
+                if lo <= int(age) <= hi:
+                    selected = dict(candidate)
+                    break
+            if selected is None:
+                return None
+            cell = selected
+            profile_key = str(
+                selected.get(
+                    "profile_label",
+                    f"{profile_key + ' ' if profile_key and profile_key != 'all' else ''}age {age}",
+                )
+            )
+
         raw = {str(k): float(v) for k, v in dict(cell.get("distribution", {})).items() if float(v) > 0}
         total = sum(raw.values())
         if total <= 0:
@@ -196,11 +223,12 @@ class PlaceModel:
         country: str,
         sex: str,
         rng: random.Random,
+        age: int | None = None,
         allowed_categories: set[str] | None = None,
         constraint_provenance: str = "",
         constraint_status: str = "",
     ) -> dict[str, Any]:
-        resolved = self._resolve_distribution(context_id, country=country, sex=sex)
+        resolved = self._resolve_distribution(context_id, country=country, sex=sex, age=age)
         if resolved is None:
             return {"available": False, "reason": f"no place model for {context_id}"}
         dist = dict(resolved["distribution"])
@@ -253,6 +281,7 @@ class PlaceModel:
         country: str,
         sex: str,
         rng: random.Random,
+        age: int | None = None,
         cause: dict[str, Any] | None = None,
         detail: dict[str, Any] | None = None,
         deep: dict[str, Any] | None = None,
@@ -261,7 +290,7 @@ class PlaceModel:
             context = self.contexts.get(context_id, {})
             if not cause_stack_matches_trigger(dict(context.get("trigger", {})), cause=cause, detail=detail, deep=deep):
                 continue
-            resolved = self._resolve_distribution(context_id, country=country, sex=sex)
+            resolved = self._resolve_distribution(context_id, country=country, sex=sex, age=age)
             if resolved is None:
                 continue
 
@@ -296,10 +325,10 @@ class PlaceModel:
                 allowed = set(by_model.get(resolved["model_country"], []))
                 if allowed:
                     return self.roll(
-                        context_id, country=country, sex=sex, rng=rng,
+                        context_id, country=country, sex=sex, rng=rng, age=age,
                         allowed_categories=allowed,
                         constraint_provenance=str(constraint.get("provenance", "")),
                         constraint_status=str(constraint.get("model_status", "")),
                     )
-            return self.roll(context_id, country=country, sex=sex, rng=rng)
+            return self.roll(context_id, country=country, sex=sex, rng=rng, age=age)
         return None
