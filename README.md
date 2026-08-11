@@ -174,7 +174,30 @@ Canadian provincial mode currently uses:
 
 ### Deathmatch
 
-Two countries:
+The preferred scalable contestant syntax is repeatable `--player`. Each player carries its own country, optional Canadian province, and sex:
+
+```bash
+python mortality_roulette.py --player ca:on:m --player fi:f
+```
+
+Compact player format:
+
+```text
+fi:m          Finland, male
+fi:f          Finland, female
+fi:r          Finland, random sex
+ca:m          national Canada, male
+ca:on:m       Ontario, male
+ca:bc:f       British Columbia, female
+```
+
+`--player` must currently be supplied exactly twice. `:r` is resolved independently for each player using its own deterministic RNG stream when `--seed` is supplied. Province and sex are part of the player spec, so `--ca-province` and `--sex/--gender` are intentionally rejected when `--player` is used. This compact contestant object is the foundation for adding further per-player exposures later without proliferating parallel `--foo-1` / `--foo-2` switches.
+
+Deathmatch presentation identifies the two sides consistently before their geography, for example `PLAYER 1: 🇨🇦 CANADA (ONTARIO)` and `PLAYER 2: 🇫🇮 FINLAND`. The final two-column card now uses explicit semantic subsections when applicable: `🚗 CRASH CONTEXT` for downstream traffic impairment/intoxication context, `💊 SUBSTANCES` for poisoning-agent context, and `🍸 ALCOHOL` for the configured lifetime exposure. Cumulative beverage conversions are labeled `🍷 WINE EQUIV.` and `🥃 VODKA EQUIV.` to make clear that they are descriptive equivalents of the same ethanol total, not additional consumption.
+
+The older `--deathmatch` interface remains backward-compatible and keeps its historical shared-sex semantics while using the same `PLAYER 1` / `PLAYER 2` presentation.
+
+Two countries with the legacy interface:
 
 ```bash
 python mortality_roulette.py --deathmatch fi ca --sex m
@@ -225,13 +248,17 @@ Controls remain available:
 
 Batch mode remains lean by default (broad/optional cause work and no monthly timing unless explicitly requested), and `--printout` remains qx-only. Finland uses Statistics Finland cause data and Canadian cause selection uses Canada's WHO Mortality Database submission. Seasonal timing is rolled only after death and does not alter annual mortality or cause selection.
 
+Finnish detailed-cause data use the vendored `datasets/finland/causes/statfin_cause_detail_2024.json` as an immutable read-only seed. If a legitimate StatFin detail cell is missing and must be fetched lazily, the new cell is written to `~/.cache/mortality_roulette/statfin_finland_cause_detail.json` (or an explicit `--detail-cache`) rather than modifying the tracked bundled dataset.
+
 If the resolved underlying cause is suicide (`X60-X84` / `Y87.0`), the simulator adds one further **STATISTICAL REASON** roll. Finland and Canada use separate sex/age evidence models; unsupported future countries fall back to an explicitly labelled Finnish-Canadian reference distribution. This is a probabilistic context model, not an assertion of an individual's proven motive.
 
-`v0.13.2` added two narrow conditional detail rolls where published evidence supports them: `X80` (intentional self-harm by jumping from a high place) receives a broad statistically weighted site type, and `X41` accidental psychotropic/antiepileptic poisoning can receive a broad **DRUG CLASS**. No heights, named hotspots, doses or molecule-level lethality ranking are modeled.
+`v0.13.2` added two narrow conditional detail rolls where published evidence supports them: `X80` (intentional self-harm by jumping from a high place) receives a broad statistically weighted site type, and `X41` accidental psychotropic/antiepileptic poisoning can receive a broad evidence-weighted drug class. In v0.13.7 poisoning output is normalized under a dedicated **💊 SUBSTANCES** section: `X40`, `X42`, and `X43` expose the broad agent category already encoded by ICD; `X41` retains its existing evidence-weighted class roll; and `X44` explicitly represents other/unspecified or multidrug poisoning context instead of leaving the agent field blank. No doses or molecule-level lethality ranking are modeled.
+
+`v0.13.7` also adds an independent **🚗 CRASH CONTEXT** roll after a resolved road-traffic death. The model deliberately distinguishes *who the statistic describes*. For Finland, OTI 2015–2024 investigation-board data provide deceased-person intoxication distributions for pedestrians and cyclists; motorcyclist and other motor-vehicle deaths use a crash-level at-fault-driver impairment reference and explicitly state that this does **not** establish that the simulated decedent was the impaired driver. For Canada, Transport Canada's 2022 fatal-collision contributing-factor statistic is used as a broad crash-level reference and likewise does not assign impairment to the decedent. Unknown/unavailable Finnish statuses are retained as explicit outcomes rather than silently treated as sober. Statistics Finland table 11b2 confirms that death-certificate alcohol/drug intoxication is available by external cause, age, sex and year; those exact cross-tabs are a future refinement and are not reverse-engineered from marginal age/sex percentages here. The traffic roll has its own RNG stream and cannot change mortality, cause, detail, SUBSTANCES, PLACE, or seasonal outcomes.
 
 `v0.13.3` generalizes the existing X80 location machinery into a public **PLACE** layer without replacing the older evidence. PLACE is a separate downstream RNG stream and is emitted only when a matching country/cause model exists. Bundled coverage now includes Finnish and Canadian drowning settings, Finnish sex-specific homicide scenes, Finnish and Canadian fatal-road settings, Finnish and Canadian cancer place of death, and Finnish neurodegenerative place of death. Explicit ICD environment information constrains the roll first: for example, bathtub/pool drowning codes resolve that setting directly, while natural-water codes restrict the subsequent statistical PLACE roll to compatible water categories. Existing X80 probabilities and its independent RNG stream are preserved exactly and now render through the same PLACE presentation. Unsupported cause/country combinations remain blank rather than receiving invented scenery. See `datasets/README.md` for exact source populations, derived residuals, caveats and provenance.
 
-`v0.13.5` extends PLACE to selected fatal poisoning and fire contexts. Finnish drug-poisoning PLACE is age-limited to 15–29 because the bundled THL forensic study covers under-30 deaths; Canada uses sex/life-stage national accidental acute-toxicity event-place data. Fire PLACE is likewise source-specific: Finnish building-fire detail is used only when ICD has already resolved a building/structure fire (`X00`/`X01`), while Canada has a broader national unintentional-fire residence/property distribution. No missing or suppressed category is silently reconstructed. Compact output groups the existing drug-class context as `💊 DRUG CLASS` and PLACE as `📍 PLACE`, with their model metadata indented beneath them.
+`v0.13.5` extends PLACE to selected fatal poisoning and fire contexts. Finnish drug-poisoning PLACE is age-limited to 15–29 because the bundled THL forensic study covers under-30 deaths; Canada uses sex/life-stage national accidental acute-toxicity event-place data. Fire PLACE is likewise source-specific: Finnish building-fire detail is used only when ICD has already resolved a building/structure fire (`X00`/`X01`), while Canada has a broader national unintentional-fire residence/property distribution. No missing or suppressed category is silently reconstructed. In v0.13.7 compact output separates `🚗 CRASH CONTEXT`, `💊 SUBSTANCES`, `📍 PLACE`, and `🍸 ALCOHOL` into distinct semantic blocks.
 
 ### Alcohol scenarios
 
@@ -379,7 +406,7 @@ Primary statistical/data sources:
 - WHO ICD-10 2019 terminology — code-title presentation metadata. WHO retains copyright/licensing control over ICD-10; this material is not represented as Statistics Finland/Statistics Canada open data.
 - [Human Mortality Database](https://www.mortality.org/) — optional Finnish historical cohort life-table input.
 - Suicide statistical-reason evidence: Finnish nationwide psychological-autopsy studies (Heikkinen and colleagues) plus Canadian coroner/medical-examiner studies from Alberta and Montréal; exact references and model provenance are in `datasets/README.md`.
-- Conditional external-cause context evidence: Toronto/Swiss/Taipei jumping-site studies for `X80`, and Finnish poisoning studies plus Public Health Agency of Canada coroner/medical-examiner toxicology data for `X41`; exact references and modeling limitations are in `datasets/README.md`.
+- Conditional external-cause context evidence: Toronto/Swiss/Taipei jumping-site studies for `X80`; Finnish poisoning studies plus Public Health Agency of Canada coroner/medical-examiner toxicology data for `X41`; WHO ICD-10 multidrug-poisoning coding semantics plus PHAC accidental acute-toxicity substance-count data for the explicitly labelled Canadian `X44` context reference; OTI fatal-road investigation data for Finnish traffic intoxication/impairment context; and Transport Canada fatal-collision contributing-factor data for the Canadian traffic reference. Exact references and modeling limitations are in `datasets/README.md`.
 
 See `datasets/README.md` and `datasets/manifest.json` for the bundled-file provenance map.
 

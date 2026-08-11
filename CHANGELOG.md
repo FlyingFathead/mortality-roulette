@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.13.7
+
+- Normalized Deathmatch contestant labels to put player identity first: `PLAYER 1: 🇨🇦 CANADA (ONTARIO)` instead of `🇨🇦 CANADA (ONTARIO) (PLAYER 1)`.
+- Legacy `--deathmatch` and the newer repeatable `--player` interface now both identify the two sides consistently as `PLAYER 1` and `PLAYER 2`, including mixed-country and batch output.
+- Refined the two-column Deathmatch result card with a `🍸 ALCOHOL` subsection divider and explicit `🍷 WINE EQUIV.` / `🥃 VODKA EQUIV.` labels so beverage quantities cannot be mistaken for additional consumption.
+- Generalized poisoning detail into a dedicated `💊 SUBSTANCES` section above ALCOHOL. Existing `X41` class rolls retain their RNG stream; `X40`, `X42`, and `X43` expose their ICD-resolved broad agent category, while `X44` now receives conservative multidrug/unspecified context instead of silently omitting substance information.
+- Added a separate downstream X44 RNG stream. Canada uses PHAC's published accidental acute-toxicity substance-count distribution as an explicitly labelled reference (29% one causal substance, 7% unknown count, 64% two-or-more at published whole-percent resolution); unsupported countries fall back only to WHO ICD-10 X44 semantics, with no invented exact drug combination.
+- Added regression coverage for Ontario/Finland identity-first labels and legacy mixed-country Deathmatch presentation.
+- Fixed poisoning/substance ICD detection so endpoints mentioned only inside broad cause ranges (for example `V01-X44`) cannot masquerade as a realized `X44` poisoning death; added the observed Finnish motorcycle-crash case as a regression.
+- Added a separate downstream `🚗 CRASH CONTEXT` section for resolved road-traffic deaths. Finland uses OTI 2015–2024 investigation-board data: decedent-specific intoxication distributions for pedestrians/cyclists and a separately labelled crash-level at-fault-driver impairment distribution for motor-vehicle deaths, retaining unknown-status cases. Canada uses Transport Canada's 2022 `Impaired / Under the Influence` fatal-collision contributing-factor share as an explicitly labelled crash-level/subset-estimated reference.
+- Added an independent traffic-context RNG stream (`0x54524649`) plus CSV provenance fields. Traffic context cannot perturb mortality, cause, detail, substance, PLACE or seasonality rolls. Broad transport ranges alone do not trigger the model; a resolved road-user detail is required. OTI age/sex marginals among impaired drivers are documented but deliberately not converted into unsupported `P(impaired | age, sex)` cells; Statistics Finland 11b2 is documented as the future exact age/sex/year cross-tab route.
+
+## v0.13.6
+
+- Added repeatable compact `--player COUNTRY[:PROVINCE]:SEX` Deathmatch contestant specs, e.g. `--player ca:on:m --player fi:f`. Players can now independently select sex and geography; Canadian province is embedded in the relevant player spec.
+- Added independent seeded sex RNG streams for `--player ...:r`, including batch mode. Legacy `--deathmatch ... --sex ...` remains backward-compatible and preserves its historical shared-sex behavior.
+- Retained the legitimate three additional StatFin male age-70–74 detailed-cause distributions already present in the v0.13.5 bundled JSON and refreshed its manifest size/SHA-256 metadata instead of deleting data.
+- Fixed the StatFin detailed-cause cache architecture: the bundled dataset is now an immutable read-only seed and newly fetched detail cells are written only to the user/runtime cache. Added a hard guard against writing a runtime cache directly over the bundled seed.
+- Added player-spec, independent-random-sex, cache-isolation, CLI, manifest and regression coverage.
+
 ## v0.13.5
 
 - Expanded the evidence-backed **PLACE** layer with fatal drug/substance-poisoning settings. Finland uses THL forensic death-investigation counts for ages 15–29 and does not extrapolate them to older ages; the Finnish source pools manner of death and is labelled accordingly. Canada uses PHAC national coroner/medical-examiner accidental acute-toxicity distributions by sex and life stage.

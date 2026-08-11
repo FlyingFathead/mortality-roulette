@@ -37,6 +37,28 @@ class ExternalContextModelTests(unittest.TestCase):
         }
         self.assertTrue(cause_stack_has_icd("X41", None, detail, None))
 
+    def test_icd_range_endpoint_is_not_treated_as_realized_code(self) -> None:
+        cause = {
+            "available": True,
+            "label": "Accidents and violence excl. accidental poisoning by alcohol (V01-X44, X46-Y89, U129)",
+        }
+        detail = {
+            "available": True,
+            "code": "003",
+            "label": "003 Motor cyclist injured in transport accident (V20-V39)",
+        }
+        self.assertFalse(cause_stack_has_icd("X44", cause, detail, None))
+        self.assertIsNone(
+            mr.EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+                country="fi",
+                sex="male",
+                x41_rng=random.Random(1),
+                x44_rng=random.Random(1),
+                cause=cause,
+                detail=detail,
+            )
+        )
+
     def test_x80_canada_uses_native_top_level_model(self) -> None:
         outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_x80_location_for_cause_stack(
             country="ca",
@@ -93,6 +115,51 @@ class ExternalContextModelTests(unittest.TestCase):
         self.assertFalse(rolled["fallback"])
         self.assertEqual(rolled["profile"], "all")
 
+    def test_x44_canada_rolls_multidrug_capable_context(self) -> None:
+        rolled = mr.EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+            country="ca",
+            sex="male",
+            x41_rng=random.Random(99),
+            x44_rng=random.Random(1),
+            detail={"available": True, "code": "X44", "label": "X44 accidental poisoning"},
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertTrue(rolled["available"])
+        self.assertEqual(rolled["context_id"], "X44_SUBSTANCE_COUNT_CONTEXT")
+        self.assertEqual(rolled["agent_label"], "Multiple drugs from different categories")
+        self.assertEqual(rolled["conditional_probability"], 0.64)
+        self.assertIn("No single drug category", rolled["context_label"])
+        self.assertIn("accidental acute-toxicity reference", rolled["model_label"])
+
+    def test_x44_finland_uses_conservative_icd_semantics_without_fake_roll(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+            country="fi",
+            sex="female",
+            x41_rng=random.Random(1),
+            x44_rng=random.Random(1),
+            detail={"available": True, "code": "X44", "label": "X44 accidental poisoning"},
+        )
+        self.assertIsNotNone(outcome)
+        assert outcome is not None
+        self.assertEqual(outcome["context_id"], "X44_ICD_CONTEXT")
+        self.assertEqual(outcome["agent_label"], "Other / unspecified drug(s)")
+        self.assertNotIn("roll", outcome)
+        self.assertIn("multiple drug categories", outcome["context_label"])
+
+    def test_x42_direct_icd_substance_category_needs_no_roll(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+            country="ca",
+            sex="male",
+            x41_rng=random.Random(1),
+            x44_rng=random.Random(1),
+            detail={"available": True, "code": "X42", "label": "X42 accidental poisoning"},
+        )
+        self.assertIsNotNone(outcome)
+        assert outcome is not None
+        self.assertEqual(outcome["agent_label"], "Narcotics / hallucinogens")
+        self.assertEqual(outcome["model_status"], "ICD-resolved broad substance category")
+
     def test_nonmatching_cause_does_not_roll(self) -> None:
         detail = {"available": True, "code": "C34", "label": "C34 lung cancer"}
         self.assertIsNone(
@@ -105,6 +172,86 @@ class ExternalContextModelTests(unittest.TestCase):
                 country="ca", sex="male", rng=random.Random(1), detail=detail
             )
         )
+
+
+    def test_finland_motorcycle_gets_crash_level_impairment_context(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+            country="fi",
+            sex="male",
+            age=16,
+            rng=random.Random(1),
+            cause={
+                "available": True,
+                "label": "Accidents and violence excl. accidental poisoning by alcohol (V01-X44, X46-Y89, U129)",
+            },
+            detail={
+                "available": True,
+                "code": "003",
+                "label": "003 Motor cyclist injured in transport accident (V20-V39)",
+            },
+        )
+        self.assertIsNotNone(outcome)
+        assert outcome is not None
+        self.assertTrue(outcome["available"])
+        self.assertEqual(outcome["road_user"], "motorcyclist")
+        self.assertEqual(outcome["context_id"], "FI_FATAL_MOTOR_VEHICLE_IMPAIRMENT")
+        self.assertIn("does not establish", outcome["scope"])
+        self.assertIn("OTI", outcome["model_label"])
+
+    def test_finland_pedestrian_model_is_decedent_specific(self) -> None:
+        resolved = mr.EXTERNAL_CONTEXT_MODEL._resolve_distribution(
+            "FI_TRAFFIC_PEDESTRIAN_INTOXICATION", country="fi", sex="female"
+        )
+        assert resolved is not None
+        self.assertAlmostEqual(resolved["distribution"]["alcohol_involved"], 39 / 216)
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+            country="fi", sex="female", age=70, rng=random.Random(2),
+            detail={"available": True, "code": "001", "label": "001 Pedestrian injured in transport accident (V01-V09)"},
+        )
+        assert outcome is not None
+        self.assertEqual(outcome["road_user_label"], "Pedestrian")
+        self.assertIn("Deceased road user", outcome["scope"])
+
+    def test_finland_cyclist_distribution_preserves_unknown_status(self) -> None:
+        resolved = mr.EXTERNAL_CONTEXT_MODEL._resolve_distribution(
+            "FI_TRAFFIC_CYCLIST_INTOXICATION", country="fi", sex="male"
+        )
+        assert resolved is not None
+        self.assertAlmostEqual(resolved["distribution"]["alcohol_involved"], 30 / 160)
+        self.assertAlmostEqual(resolved["distribution"]["status_unknown"], 17 / 160)
+
+    def test_canada_road_death_uses_fatal_collision_contributing_factor_reference(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+            country="ca", sex="male", age=35, rng=random.Random(1),
+            detail={"available": True, "code": "V29.9", "label": "V29.9 Motorcyclist injured in transport accident"},
+        )
+        self.assertIsNotNone(outcome)
+        assert outcome is not None
+        self.assertEqual(outcome["context_id"], "CA_FATAL_COLLISION_IMPAIRMENT")
+        self.assertEqual(outcome["road_user"], "motorcyclist")
+        resolved = mr.EXTERNAL_CONTEXT_MODEL._resolve_distribution(
+            "CA_FATAL_COLLISION_IMPAIRMENT", country="ca", sex="male"
+        )
+        assert resolved is not None
+        self.assertEqual(resolved["distribution"]["impairment_reported"], 0.23)
+        self.assertIn("does not establish", outcome["scope"])
+
+    def test_nontransport_external_cause_does_not_get_crash_context(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+            country="fi", sex="male", age=30, rng=random.Random(1),
+            cause={"available": True, "label": "Accidents and violence (V01-X44, X46-Y89)"},
+            detail={"available": True, "code": "066", "label": "066 Accidental poisoning by other drugs (X44)"},
+        )
+        self.assertIsNone(outcome)
+
+    def test_traffic_context_roll_is_reproducible_on_independent_rng(self) -> None:
+        kwargs = dict(
+            country="fi", sex="male", age=44,
+            detail={"available": True, "code": "004", "label": "004 Occupant of other motor vehicle injured in transport accident (V40-V79)"},
+        )
+        a = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(rng=random.Random(555), **kwargs)
+        b = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(rng=random.Random(555), **kwargs)
+        self.assertEqual(a, b)
 
     def test_context_rolls_are_reproducible_on_independent_rngs(self) -> None:
         detail_x80 = {"available": True, "code": "X80", "label": "X80 Intentional self-harm"}
@@ -132,6 +279,13 @@ class DeathmatchContextRowsTests(unittest.TestCase):
                 "deep": None,
                 "x80_location": {"available": True, "label": "Bridge", "model_label": "Canada"},
                 "x41_drug_class": {"available": True, "label": "Antidepressants", "model_label": "Canada", "profile": "male"},
+                "substance_context": {
+                    "available": True, "context_id": "X41_DRUG_CLASS",
+                    "agent_label": "Antidepressants",
+                    "context_label": "Modeled broad drug class within ICD-10 X41",
+                    "model_label": "Canada", "profile": "male",
+                    "conditional_probability": 0.3, "roll": 0.2,
+                },
                 "suicide_reason": None,
                 "seasonal": None,
             },
@@ -145,8 +299,11 @@ class DeathmatchContextRowsTests(unittest.TestCase):
             mr.ACTIVE_CANADA_PROVINCE = old_province
         self.assertIn(("📍 PLACE", "Bridge"), rows)
         self.assertIn(("   PLACE MODEL", "Canada"), rows)
-        self.assertIn(("💊 DRUG CLASS", "Antidepressants"), rows)
-        self.assertIn(("   DRUG MODEL", "Canada | male"), rows)
+        self.assertIn(("AGENT(S)", "Antidepressants"), rows)
+        self.assertIn(("CONTEXT", "Modeled broad drug class within ICD-10 X41"), rows)
+        self.assertIn(("CONTEXT p", "30.00%"), rows)
+        self.assertIn(("CONTEXT ROLL", "20.0000%"), rows)
+        self.assertIn(("CONTEXT MODEL", "Canada | male"), rows)
 
 
 if __name__ == "__main__":

@@ -402,6 +402,147 @@ class DeathmatchResultPresentationTests(unittest.TestCase):
             mr.deathmatch_contestant_label = original_label
             mr._deathmatch_compact_stats = original_stats
 
+    def test_result_table_separates_alcohol_section_and_labels_equivalents(self) -> None:
+        original_label = mr.deathmatch_contestant_label
+        original_stats = mr._deathmatch_compact_stats
+        try:
+            mr.deathmatch_contestant_label = lambda *args, **kwargs: "PLAYER"
+            mr._deathmatch_compact_stats = lambda *args, **kwargs: [
+                ("TAPPED OUT", "age 73"),
+                ("MONTH", "July"),
+                ("EXPOSURE", "55.5 y @ 71.0 g ethanol/day"),
+                ("ETHANOL", "≈1,440 kg / ≈1,825 L pure ethanol"),
+                ("🍷 WINE EQUIV.", "≈20,280 × 750 mL @ 12% ABV"),
+                ("🥃 VODKA EQUIV.", "≈6,519 × 700 mL @ 40% ABV"),
+                ("SURVIVAL", "50.00% baseline → 40.00% preset"),
+            ]
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                mr._print_deathmatch_result_table(
+                    [{}, {}], [{}, {}],
+                    countries=["fi", "ca"],
+                    provinces=[None, None],
+                    player_numbers=[1, 2],
+                    sex="male", start_age=0,
+                    winner_idx=0, win_mode="long",
+                )
+        finally:
+            mr.deathmatch_contestant_label = original_label
+            mr._deathmatch_compact_stats = original_stats
+
+        output = buf.getvalue()
+        self.assertIn("🍸 ALCOHOL", output)
+        self.assertIn("🍷 WINE EQUIV.", output)
+        self.assertIn("🥃 VODKA EQUIV.", output)
+        alcohol_index = output.index("🍸 ALCOHOL")
+        month_index = output.index("MONTH")
+        exposure_index = output.index("EXPOSURE")
+        self.assertLess(month_index, alcohol_index)
+        self.assertLess(alcohol_index, exposure_index)
+        self.assertIn("┼", output[month_index:alcohol_index])
+
+    def test_result_table_separates_substances_before_alcohol(self) -> None:
+        original_label = mr.deathmatch_contestant_label
+        original_stats = mr._deathmatch_compact_stats
+        try:
+            mr.deathmatch_contestant_label = lambda *args, **kwargs: "PLAYER"
+            left = [
+                ("TAPPED OUT", "age 73"),
+                ("MONTH", "July"),
+                ("AGENT(S)", "Multiple drugs from different categories"),
+                ("CONTEXT", "No single drug category identified as the main cause"),
+                ("CONTEXT p", "64.00%"),
+                ("CONTEXT ROLL", "31.4472%"),
+                ("CONTEXT MODEL", "Canada | accidental acute-toxicity reference"),
+                ("EXPOSURE", "55.5 y @ 71.0 g ethanol/day"),
+            ]
+            right = [
+                ("TAPPED OUT", "age 80"),
+                ("MONTH", "November"),
+                ("EXPOSURE", "62.5 y @ 71.0 g ethanol/day"),
+            ]
+            calls = iter([left, right])
+            mr._deathmatch_compact_stats = lambda *args, **kwargs: next(calls)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                mr._print_deathmatch_result_table(
+                    [{}, {}], [{}, {}],
+                    countries=["ca", "fi"],
+                    provinces=[None, None],
+                    player_numbers=[1, 2],
+                    sex="male", start_age=0,
+                    winner_idx=1, win_mode="long",
+                )
+        finally:
+            mr.deathmatch_contestant_label = original_label
+            mr._deathmatch_compact_stats = original_stats
+
+        output = buf.getvalue()
+        self.assertIn("💊 SUBSTANCES", output)
+        self.assertEqual(output.count("💊 SUBSTANCES"), 2)
+        self.assertIn("AGENT(S)", output)
+        left_column = " ".join(
+            line.split("│", 1)[0].strip()
+            for line in output.splitlines()
+        )
+        self.assertIn("Multiple drugs from different categories", left_column)
+        self.assertIn("🍸 ALCOHOL", output)
+        substance_index = output.index("💊 SUBSTANCES")
+        alcohol_index = output.index("🍸 ALCOHOL")
+        self.assertLess(substance_index, alcohol_index)
+        self.assertIn("┼", output[substance_index:alcohol_index])
+
+
+    def test_result_table_separates_crash_context_before_substances_and_alcohol(self) -> None:
+        original_label = mr.deathmatch_contestant_label
+        original_stats = mr._deathmatch_compact_stats
+        try:
+            mr.deathmatch_contestant_label = lambda *args, **kwargs: "PLAYER"
+            left = [
+                ("TAPPED OUT", "age 16"),
+                ("MONTH", "August"),
+                ("ROAD USER", "Motorcyclist"),
+                ("IMPAIRMENT", "Alcohol only (impaired at-fault driver)"),
+                ("IMPAIRMENT p", "17.84%"),
+                ("IMPAIR ROLL", "10.0000%"),
+                ("IMPAIR MODEL", "Finland | OTI fatal motor-vehicle crashes 2015-2024"),
+                ("SCOPE", "Crash-level: does not establish player impairment"),
+                ("EXPOSURE", "—"),
+            ]
+            right = [
+                ("TAPPED OUT", "age 84"),
+                ("MONTH", "December"),
+                ("AGENT(S)", "Multiple drugs from different categories"),
+                ("CONTEXT", "No single drug category identified as the main cause"),
+                ("EXPOSURE", "66.5 y @ 71.0 g ethanol/day"),
+            ]
+            calls = iter([left, right])
+            mr._deathmatch_compact_stats = lambda *args, **kwargs: next(calls)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                mr._print_deathmatch_result_table(
+                    [{}, {}], [{}, {}],
+                    countries=["fi", "ca"], provinces=[None, None],
+                    player_numbers=[1, 2], sex="male", start_age=0,
+                    winner_idx=1, win_mode="long",
+                )
+        finally:
+            mr.deathmatch_contestant_label = original_label
+            mr._deathmatch_compact_stats = original_stats
+
+        output = buf.getvalue()
+        self.assertEqual(output.count("🚗 CRASH CONTEXT"), 2)
+        self.assertEqual(output.count("💊 SUBSTANCES"), 2)
+        self.assertEqual(output.count("🍸 ALCOHOL"), 2)
+        crash_index = output.index("🚗 CRASH CONTEXT")
+        substance_index = output.index("💊 SUBSTANCES")
+        alcohol_index = output.index("🍸 ALCOHOL")
+        self.assertLess(crash_index, substance_index)
+        self.assertLess(substance_index, alcohol_index)
+        self.assertIn("Motorcyclist", output)
+        self.assertIn("IMPAIRMENT", output)
+        self.assertIn("—", output)
+
     def test_result_table_emits_closing_bottom_rule(self) -> None:
         original_label = mr.deathmatch_contestant_label
         original_stats = mr._deathmatch_compact_stats
@@ -494,9 +635,9 @@ class DeathmatchBatchTests(unittest.TestCase):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 rc = mr.run_deathmatch_batch(
-                    self._args("long"), selection="m", countries=["fi", "ca"],
+                    self._args("long"), selections=["m", "m"], shared_sex=True, countries=["fi", "ca"],
                     provinces=[None, "bc"], player_numbers=[None, None], contexts=contexts,
-                    match_seed=123, sex_rng=random.Random(1),
+                    match_seed=123, sex_rngs=[random.Random(1), random.Random(1)],
                     mortality_rngs=[random.Random(2), random.Random(3)],
                 )
         finally:
@@ -520,9 +661,9 @@ class DeathmatchBatchTests(unittest.TestCase):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 rc = mr.run_deathmatch_batch(
-                    self._args("short"), selection="m", countries=["fi", "ca"],
+                    self._args("short"), selections=["m", "m"], shared_sex=True, countries=["fi", "ca"],
                     provinces=[None, "bc"], player_numbers=[None, None], contexts=contexts,
-                    match_seed=456, sex_rng=random.Random(1),
+                    match_seed=456, sex_rngs=[random.Random(1), random.Random(1)],
                     mortality_rngs=[random.Random(2), random.Random(3)],
                 )
         finally:

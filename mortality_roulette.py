@@ -93,6 +93,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from collections import Counter
+from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 
@@ -109,7 +110,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.5"
+VERSION = "0.13.7"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -443,6 +444,66 @@ def normalize_canada_province(value: str) -> str | None:
     return key
 
 
+@dataclass(frozen=True)
+class PlayerSpec:
+    """Normalized compact Deathmatch contestant specification."""
+
+    country: str
+    province: str | None
+    sex_selection: str
+
+
+def parse_player_spec(value: str) -> PlayerSpec:
+    """Parse COUNTRY[:PROVINCE]:SEX, e.g. fi:f or ca:on:m."""
+    raw = str(value).strip()
+    parts = [part.strip() for part in raw.split(":")]
+    if len(parts) not in {2, 3} or any(not part for part in parts):
+        raise ValueError(
+            f"invalid --player specification {value!r}; use fi:m, fi:f, ca:m, or ca:on:m"
+        )
+
+    country_token = parts[0].casefold()
+    country_aliases = {
+        "fi": "fi", "finland": "fi",
+        "ca": "ca", "canada": "ca",
+    }
+    if country_token not in country_aliases:
+        raise ValueError(
+            f"unknown --player country {parts[0]!r}; use fi/finland or ca/canada"
+        )
+    country = country_aliases[country_token]
+
+    if len(parts) == 2:
+        province_token = None
+        sex_token = parts[1]
+    else:
+        province_token = parts[1]
+        sex_token = parts[2]
+
+    sex_aliases = {
+        "m": "m", "male": "m",
+        "f": "f", "female": "f",
+        "r": "r", "random": "r",
+    }
+    sex_key = sex_token.casefold()
+    if sex_key not in sex_aliases:
+        raise ValueError(
+            f"unknown --player sex {sex_token!r}; use m/male, f/female, or r/random"
+        )
+    sex_selection = sex_aliases[sex_key]
+
+    if country == "fi":
+        if province_token is not None:
+            raise ValueError(
+                f"Finland --player specification {value!r} must not include a province; use fi:{sex_selection}"
+            )
+        province = None
+    else:
+        province = normalize_canada_province(province_token) if province_token is not None else None
+
+    return PlayerSpec(country=country, province=province, sex_selection=sex_selection)
+
+
 def canada_province_name(province: str | None) -> str | None:
     if province is None:
         return None
@@ -508,15 +569,15 @@ def deathmatch_contestant_label(
     province: str | None = None,
     player_number: int | None = None,
 ) -> str:
-    """Universal deathmatch label: flag + uppercase country/region + optional player tag."""
+    """Universal deathmatch label: player identity first, then flag + geography."""
     flag, name = COUNTRY_DISPLAY.get(country_code, ("🏳️", country_code.upper()))
-    label = f"{flag} {name.upper()}"
+    geography = f"{flag} {name.upper()}"
     if country_code == "ca" and province is not None:
         region_name = canada_province_name(province) or province
-        label += f" ({region_name.upper()})"
+        geography += f" ({region_name.upper()})"
     if player_number is not None:
-        label += f" (PLAYER {player_number})"
-    return label
+        return f"PLAYER {player_number}: {geography}"
+    return geography
 
 
 def country_flag(country_code: str | None = None) -> str:
@@ -586,16 +647,18 @@ def _deathmatch_live_tapout_row(
     provinces: list[str | None],
     player_numbers: list[int | None],
     states: list[dict[str, object]],
-    sex: str,
+    sex: str | None = None,
+    sexes: list[str] | None = None,
     column_width: int,
     blink: bool = True,
 ) -> str:
     """Render live tap-out announcements in the contestant's own arena column."""
+    resolved_sexes = list(sexes) if sexes is not None else [str(sex), str(sex)]
     cells = ["", ""]
     for idx in newly_dead:
         banner = _deathmatch_tapout_banner(
             countries[idx],
-            sex,
+            resolved_sexes[idx],
             int(states[idx]["death_age"]),
             province=provinces[idx],
             player_number=player_numbers[idx],
@@ -5701,27 +5764,53 @@ def _statfin_neoplasm_hazard_rr_from_detail(
 
 
 class CauseDetailResolver:
-    """Lazy, cached StatFin child-cause distributions for selected broad groups."""
+    """Lazy StatFin detail resolver with an immutable bundled seed plus writable runtime cache."""
 
-    def __init__(self, cache_path: Path = DEFAULT_DETAIL_CACHE, refresh: bool = False) -> None:
+    def __init__(
+        self,
+        cache_path: Path = DEFAULT_DETAIL_CACHE,
+        refresh: bool = False,
+        *,
+        seed_path: Path | None = None,
+    ) -> None:
         self.cache_path = cache_path
+        self.seed_path = seed_path
         self.refresh = refresh
         self._meta: dict[str, dict] = {}
         self._cache: dict[str, list[dict[str, object]]] = {}
+        self._runtime_cache: dict[str, list[dict[str, object]]] = {}
         self._refreshed_keys: set[str] = set()
-        if cache_path.exists() and not refresh:
+
+        if not refresh and seed_path is not None and seed_path.exists():
+            try:
+                payload = json.loads(seed_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    distributions = payload.get("distributions", {})
+                    if isinstance(distributions, dict):
+                        self._cache.update(distributions)
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        if not refresh and cache_path.exists() and cache_path != seed_path:
             try:
                 payload = json.loads(cache_path.read_text(encoding="utf-8"))
                 if isinstance(payload, dict):
-                    self._cache = payload.get("distributions", {})
+                    distributions = payload.get("distributions", {})
+                    if isinstance(distributions, dict):
+                        self._runtime_cache.update(distributions)
+                        self._cache.update(distributions)
             except (OSError, json.JSONDecodeError):
-                self._cache = {}
+                pass
 
     def _save(self) -> None:
+        # Never write the vendored dataset. New lazy fetches belong in the user's
+        # runtime cache so repository snapshots remain byte-stable and manifestable.
+        if self.seed_path is not None and self.cache_path == self.seed_path:
+            raise CauseDataError("refusing to write StatFin runtime cache over bundled dataset")
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": 1,
-            "distributions": self._cache,
+            "distributions": self._runtime_cache,
         }
         self.cache_path.write_text(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
@@ -5828,6 +5917,7 @@ class CauseDetailResolver:
             rows.append({"label": label, "count": count})
 
         self._cache[cache_key] = rows
+        self._runtime_cache[cache_key] = rows
         self._refreshed_keys.add(cache_key)
         self._save()
         return rows
@@ -6230,6 +6320,53 @@ def print_external_context(outcome: dict[str, object]) -> None:
         print(f"model basis: fallback for {requested} — {outcome.get('provenance', 'reference model')}")
     else:
         print(f"model basis: {outcome.get('provenance', 'country evidence model')}")
+    print(f"model status: {outcome.get('model_status', 'evidence model')}")
+
+
+def print_substance_context(outcome: dict[str, object]) -> None:
+    """Print normalized poisoning-substance context without overstating certainty."""
+    if not outcome.get("available"):
+        return
+    print()
+    print_country_section_heading("💊 SUBSTANCES")
+    print(f"AGENT(S): {outcome.get('agent_label', outcome.get('label', 'unresolved'))}")
+    context_label = str(outcome.get("context_label", "")).strip()
+    if context_label:
+        print(f"CONTEXT: {context_label}")
+    probability = outcome.get("conditional_probability")
+    if isinstance(probability, (int, float)):
+        print(f"context probability: {float(probability) * 100:.2f}%")
+    roll = outcome.get("roll")
+    if isinstance(roll, (int, float)):
+        print(f"context roll: {float(roll) * 100:.4f}%")
+    profile = outcome.get("profile")
+    model_line = str(outcome.get("model_label", outcome.get("model_country", "unknown")))
+    if profile and profile != "all":
+        model_line += f" | {profile}"
+    print(f"context model: {model_line}")
+    print(f"model status: {outcome.get('model_status', 'evidence model')}")
+
+
+def print_traffic_context(outcome: dict[str, object]) -> None:
+    """Print one evidence-backed downstream road-crash impairment context."""
+    if not outcome.get("available"):
+        return
+    print()
+    print_country_section_heading("🚗 CRASH CONTEXT")
+    road_user = str(outcome.get("road_user_label", "Road traffic")).strip()
+    if road_user:
+        print(f"ROAD USER: {road_user}")
+    print(f"IMPAIRMENT: {outcome.get('impairment_label', outcome.get('label', 'unresolved'))}")
+    probability = outcome.get("conditional_probability")
+    if isinstance(probability, (int, float)):
+        print(f"impairment probability: {float(probability) * 100:.2f}%")
+    roll = outcome.get("roll")
+    if isinstance(roll, (int, float)):
+        print(f"impairment roll: {float(roll) * 100:.4f}%")
+    print(f"impairment model: {outcome.get('model_label', outcome.get('model_country', 'unknown'))}")
+    scope = str(outcome.get("scope", "")).strip()
+    if scope:
+        print(f"scope: {scope}")
     print(f"model status: {outcome.get('model_status', 'evidence model')}")
 
 
@@ -7567,6 +7704,8 @@ def simulate(
     suicide_reason_rng: random.Random | None = None,
     x80_location_rng: random.Random | None = None,
     x41_drug_class_rng: random.Random | None = None,
+    x44_substance_context_rng: random.Random | None = None,
+    traffic_context_rng: random.Random | None = None,
     place_rng: random.Random | None = None,
     cause_detail_mode: str = "broad",
     seasonal_source: SeasonalTimingSource | None = None,
@@ -7621,6 +7760,19 @@ def simulate(
                 "x41_drug_class",
                 "x41_drug_class_probability",
                 "x41_drug_class_model",
+                "traffic_road_user",
+                "traffic_impairment",
+                "traffic_probability",
+                "traffic_roll",
+                "traffic_model",
+                "traffic_scope",
+                "traffic_context_id",
+                "substances",
+                "substances_context",
+                "substances_probability",
+                "substances_roll",
+                "substances_model",
+                "substances_context_id",
                 "death_month",
                 "death_month_probability",
                 "seasonal_index",
@@ -7916,16 +8068,35 @@ def simulate(
                     deep=deep_detail_outcome,
                 )
 
-            x41_drug_class_outcome = None
-            if died and x41_drug_class_rng is not None:
-                x41_drug_class_outcome = EXTERNAL_CONTEXT_MODEL.roll_x41_drug_class_for_cause_stack(
+            traffic_context_outcome = None
+            if died and traffic_context_rng is not None:
+                traffic_context_outcome = EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
                     country=ACTIVE_COUNTRY,
                     sex=sex,
-                    rng=x41_drug_class_rng,
+                    age=age,
+                    rng=traffic_context_rng,
                     cause=cause_outcome,
                     detail=detail_outcome,
                     deep=deep_detail_outcome,
                 )
+
+            substance_context_outcome = None
+            x41_drug_class_outcome = None
+            if died and x41_drug_class_rng is not None and x44_substance_context_rng is not None:
+                substance_context_outcome = EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+                    country=ACTIVE_COUNTRY,
+                    sex=sex,
+                    x41_rng=x41_drug_class_rng,
+                    x44_rng=x44_substance_context_rng,
+                    cause=cause_outcome,
+                    detail=detail_outcome,
+                    deep=deep_detail_outcome,
+                )
+                if (
+                    isinstance(substance_context_outcome, dict)
+                    and substance_context_outcome.get("context_id") == "X41_DRUG_CLASS"
+                ):
+                    x41_drug_class_outcome = substance_context_outcome
 
             general_place_outcome = None
             if died and place_rng is not None:
@@ -8093,6 +8264,64 @@ def simulate(
                             if not x41_drug_class_outcome or not x41_drug_class_outcome.get("available")
                             else x41_drug_class_outcome["model_label"]
                         ),
+                        "traffic_road_user": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("road_user_label", "")
+                        ),
+                        "traffic_impairment": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("impairment_label", traffic_context_outcome.get("label", ""))
+                        ),
+                        "traffic_probability": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("conditional_probability", "")
+                        ),
+                        "traffic_roll": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("roll", "")
+                        ),
+                        "traffic_model": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("model_label", "")
+                        ),
+                        "traffic_scope": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("scope", "")
+                        ),
+                        "traffic_context_id": (
+                            "" if not traffic_context_outcome or not traffic_context_outcome.get("available")
+                            else traffic_context_outcome.get("context_id", "")
+                        ),
+                        "substances": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("agent_label", substance_context_outcome.get("label", ""))
+                        ),
+                        "substances_context": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("context_label", "")
+                        ),
+                        "substances_probability": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("conditional_probability", "")
+                        ),
+                        "substances_roll": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("roll", "")
+                        ),
+                        "substances_model": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("model_label", "")
+                        ),
+                        "substances_context_id": (
+                            ""
+                            if not substance_context_outcome or not substance_context_outcome.get("available")
+                            else substance_context_outcome.get("context_id", "")
+                        ),
                         "death_month": (
                             ""
                             if not seasonal_outcome or not seasonal_outcome.get("available")
@@ -8127,14 +8356,16 @@ def simulate(
                             tree=(cause_detail_mode == "tree"),
                             deep_detail=deep_detail_outcome,
                         )
-                    if x41_drug_class_outcome is not None:
-                        print_external_context(x41_drug_class_outcome)
                     if place_outcome is not None:
                         print_place_context(place_outcome)
                     if suicide_reason_outcome is not None:
                         print_suicide_reason(suicide_reason_outcome)
                     if seasonal_outcome is not None:
                         print_seasonal_timing(seasonal_outcome)
+                    if traffic_context_outcome is not None:
+                        print_traffic_context(traffic_context_outcome)
+                    if substance_context_outcome is not None:
+                        print_substance_context(substance_context_outcome)
                 if ACTIVE_BOOZEHOUND:
                     print_boozehound_exposure_summary(
                         age,
@@ -8872,6 +9103,15 @@ def _deathmatch_rng(
     )
 
 
+def _statfin_detail_resolver_from_args(args: argparse.Namespace) -> CauseDetailResolver:
+    """Use bundled detail as a read-only seed and a separate writable runtime cache."""
+    return CauseDetailResolver(
+        cache_path=(args.detail_cache or DEFAULT_DETAIL_CACHE),
+        refresh=bool(args.refresh_detail),
+        seed_path=(None if args.refresh_detail else BUNDLED_STATFIN_DETAIL),
+    )
+
+
 def _preflight_deathmatch_country(
     args: argparse.Namespace,
     country: str,
@@ -8960,10 +9200,7 @@ def _preflight_deathmatch_country(
                     raise CauseDataError("internal error: Canadian WHO raw source missing")
                 detail_resolver = CanadaCauseDetailResolver(canada_raw)
         else:
-            detail_resolver = CauseDetailResolver(
-                cache_path=(args.detail_cache or (DEFAULT_DETAIL_CACHE if args.refresh_detail else BUNDLED_STATFIN_DETAIL)),
-                refresh=args.refresh_detail,
-            )
+            detail_resolver = _statfin_detail_resolver_from_args(args)
             if isinstance(cause_source, CauseOfDeathSource):
                 setattr(cause_source, "_alcohol_detail_resolver", detail_resolver)
             if args.causes and cause_detail_mode in {"specific", "tree"} and not args.no_who_detail:
@@ -9023,6 +9260,8 @@ def _preflight_deathmatch_country(
         "suicide_reason_rng": _deathmatch_rng(args.seed, country, 0x53554358, contestant_index=contestant_index),
         "x80_location_rng": _deathmatch_rng(args.seed, country, 0x5838304C, contestant_index=contestant_index),
         "x41_drug_class_rng": _deathmatch_rng(args.seed, country, 0x58343144, contestant_index=contestant_index),
+        "x44_substance_context_rng": _deathmatch_rng(args.seed, country, 0x58343453, contestant_index=contestant_index),
+        "traffic_context_rng": _deathmatch_rng(args.seed, country, 0x54524649, contestant_index=contestant_index),
         "place_rng": _deathmatch_rng(args.seed, country, 0x504C4143, contestant_index=contestant_index),
         "seasonal_rng": _deathmatch_rng(args.seed, country, 0x53454153, contestant_index=contestant_index),
     }
@@ -9044,6 +9283,8 @@ def _deathmatch_roll_cause_stack(
     suicide_reason_outcome = None
     x80_location_outcome = None
     x41_drug_class_outcome = None
+    substance_context_outcome = None
+    traffic_context_outcome = None
     general_place_outcome = None
     place_outcome = None
     seasonal_outcome = None
@@ -9103,14 +9344,30 @@ def _deathmatch_roll_cause_stack(
         deep=deep_outcome,
     )
 
-    x41_drug_class_outcome = EXTERNAL_CONTEXT_MODEL.roll_x41_drug_class_for_cause_stack(
+    traffic_context_outcome = EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
         country=str(ctx.get("country", "")),
         sex=sex,
-        rng=ctx["x41_drug_class_rng"],
+        age=age,
+        rng=ctx["traffic_context_rng"],
         cause=cause_outcome,
         detail=detail_outcome,
         deep=deep_outcome,
     )
+
+    substance_context_outcome = EXTERNAL_CONTEXT_MODEL.roll_substance_context_for_cause_stack(
+        country=str(ctx.get("country", "")),
+        sex=sex,
+        x41_rng=ctx["x41_drug_class_rng"],
+        x44_rng=ctx["x44_substance_context_rng"],
+        cause=cause_outcome,
+        detail=detail_outcome,
+        deep=deep_outcome,
+    )
+    if (
+        isinstance(substance_context_outcome, dict)
+        and substance_context_outcome.get("context_id") == "X41_DRUG_CLASS"
+    ):
+        x41_drug_class_outcome = substance_context_outcome
 
     general_place_outcome = PLACE_MODEL.roll_for_cause_stack(
         country=str(ctx.get("country", "")),
@@ -9143,6 +9400,8 @@ def _deathmatch_roll_cause_stack(
         "x80_location": x80_location_outcome,
         "place": place_outcome,
         "x41_drug_class": x41_drug_class_outcome,
+        "substance_context": substance_context_outcome,
+        "traffic_context": traffic_context_outcome,
         "seasonal": seasonal_outcome,
     }
 
@@ -9235,6 +9494,8 @@ def _print_deathmatch_final_card(
     x80_location_outcome = stack.get("x80_location")
     place_outcome = stack.get("place") or _as_place_outcome(x80_location_outcome, x80=True)
     x41_drug_class_outcome = stack.get("x41_drug_class")
+    substance_context_outcome = stack.get("substance_context") or x41_drug_class_outcome
+    traffic_context_outcome = stack.get("traffic_context")
     seasonal_outcome = stack.get("seasonal")
 
     if cause_outcome is not None:
@@ -9246,14 +9507,20 @@ def _print_deathmatch_final_card(
                 tree=(cause_detail_mode == "tree"),
                 deep_detail=deep_outcome,
             )
-        if x41_drug_class_outcome is not None:
-            print_external_context(x41_drug_class_outcome)
         if place_outcome is not None:
             print_place_context(place_outcome)
         if suicide_reason_outcome is not None:
             print_suicide_reason(suicide_reason_outcome)
         if seasonal_outcome is not None:
             print_seasonal_timing(seasonal_outcome)
+        if traffic_context_outcome is not None:
+            print_traffic_context(traffic_context_outcome)
+        if substance_context_outcome is not None:
+            if isinstance(substance_context_outcome, dict) and "agent_label" not in substance_context_outcome:
+                substance_context_outcome = dict(substance_context_outcome)
+                substance_context_outcome.setdefault("agent_label", substance_context_outcome.get("label", "unresolved"))
+                substance_context_outcome.setdefault("context_label", "Modeled broad drug class within ICD-10 X41")
+            print_substance_context(substance_context_outcome)
     if ACTIVE_BOOZEHOUND:
         print_boozehound_exposure_summary(
             age,
@@ -9310,6 +9577,13 @@ def _deathmatch_compact_stats(
     if not isinstance(place, dict) or not place.get("available"):
         place = _as_place_outcome(x80_location, x80=True)
     x41_drug_class = stack.get("x41_drug_class") if isinstance(stack, dict) else None
+    substance_context = stack.get("substance_context") if isinstance(stack, dict) else None
+    traffic_context = stack.get("traffic_context") if isinstance(stack, dict) else None
+    if not isinstance(substance_context, dict) and isinstance(x41_drug_class, dict):
+        # Backward-compatible synthetic stack used by older tests/callers.
+        substance_context = dict(x41_drug_class)
+        substance_context.setdefault("agent_label", str(x41_drug_class.get("label", "unresolved")))
+        substance_context.setdefault("context_label", "Modeled broad drug class within ICD-10 X41")
     seasonal = stack.get("seasonal") if isinstance(stack, dict) else None
 
     rows: list[tuple[str, str]] = [("TAPPED OUT", f"age {age}")]
@@ -9335,14 +9609,6 @@ def _deathmatch_compact_stats(
         detail_text = str(detail.get("label", detail_text))
     rows.append(("DETAIL", detail_text))
 
-    if isinstance(x41_drug_class, dict) and x41_drug_class.get("available"):
-        rows.append(("💊 DRUG CLASS", str(x41_drug_class.get("label", "unresolved"))))
-        model_label = str(x41_drug_class.get("model_label", x41_drug_class.get("model_country", "unknown")))
-        profile = x41_drug_class.get("profile")
-        if profile and profile != "all":
-            model_label = f"{model_label} | {profile}"
-        rows.append(("   DRUG MODEL", model_label))
-
     if isinstance(place, dict) and place.get("available"):
         rows.append(("📍 PLACE", str(place.get("label", "unresolved"))))
         probability = place.get("conditional_probability")
@@ -9365,6 +9631,38 @@ def _deathmatch_compact_stats(
     if isinstance(seasonal, dict) and seasonal.get("available"):
         rows.append(("MONTH", str(seasonal.get("month_name", "unknown"))))
 
+    if isinstance(traffic_context, dict) and traffic_context.get("available"):
+        rows.append(("ROAD USER", str(traffic_context.get("road_user_label", "Road traffic"))))
+        rows.append(("IMPAIRMENT", str(traffic_context.get("impairment_label", traffic_context.get("label", "unresolved")))))
+        probability = traffic_context.get("conditional_probability")
+        if isinstance(probability, (int, float)):
+            rows.append(("IMPAIRMENT p", f"{float(probability) * 100:.2f}%"))
+        roll_value = traffic_context.get("roll")
+        if isinstance(roll_value, (int, float)):
+            rows.append(("IMPAIR ROLL", f"{float(roll_value) * 100:.4f}%"))
+        model_label = str(traffic_context.get("model_label", traffic_context.get("model_country", "unknown")))
+        rows.append(("IMPAIR MODEL", model_label))
+        scope = str(traffic_context.get("scope", "")).strip()
+        if scope:
+            rows.append(("SCOPE", scope))
+
+    if isinstance(substance_context, dict) and substance_context.get("available"):
+        rows.append(("AGENT(S)", str(substance_context.get("agent_label", substance_context.get("label", "unresolved")))))
+        context_label = str(substance_context.get("context_label", "")).strip()
+        if context_label:
+            rows.append(("CONTEXT", context_label))
+        probability = substance_context.get("conditional_probability")
+        if isinstance(probability, (int, float)):
+            rows.append(("CONTEXT p", f"{float(probability) * 100:.2f}%"))
+        roll_value = substance_context.get("roll")
+        if isinstance(roll_value, (int, float)):
+            rows.append(("CONTEXT ROLL", f"{float(roll_value) * 100:.4f}%"))
+        model_label = str(substance_context.get("model_label", substance_context.get("model_country", "unknown")))
+        profile = substance_context.get("profile")
+        if profile and profile != "all":
+            model_label = f"{model_label} | {profile}"
+        rows.append(("CONTEXT MODEL", model_label))
+
     if ACTIVE_BOOZEHOUND and boozehound_exposure_has_started(age):
         years = boozehound_exposure_years(age)
         kg = boozehound_cumulative_ethanol_kg(age)
@@ -9376,8 +9674,8 @@ def _deathmatch_compact_stats(
         rows.extend([
             ("EXPOSURE", f"{years:.1f} y @ {ACTIVE_BOOZEHOUND_GRAMS_PER_DAY:.1f} g ethanol/day"),
             ("ETHANOL", f"≈{kg:,.0f} kg / ≈{eq['pure_ethanol_l']:,.0f} L pure ethanol"),
-            ("🍷 WINE", f"≈{eq['wine_bottles']:,.0f} × {BOOZEHOUND_WINO_BOTTLE_ML:.0f} mL @ {BOOZEHOUND_WINO_ABV * 100:.0f}% ABV"),
-            ("🥃 VODKA", f"≈{eq['vodka_bottles']:,.0f} × {BOOZEHOUND_EQ_VODKA_BOTTLE_ML:.0f} mL @ {BOOZEHOUND_EQ_VODKA_ABV * 100:.0f}% ABV"),
+            ("🍷 WINE EQUIV.", f"≈{eq['wine_bottles']:,.0f} × {BOOZEHOUND_WINO_BOTTLE_ML:.0f} mL @ {BOOZEHOUND_WINO_ABV * 100:.0f}% ABV"),
+            ("🥃 VODKA EQUIV.", f"≈{eq['vodka_bottles']:,.0f} × {BOOZEHOUND_EQ_VODKA_BOTTLE_ML:.0f} mL @ {BOOZEHOUND_EQ_VODKA_ABV * 100:.0f}% ABV"),
             ("SURVIVAL", f"{metrics['baseline_survival'] * 100:.2f}% baseline → {metrics['adjusted_survival'] * 100:.2f}% preset"),
         ])
     return rows
@@ -9480,22 +9778,24 @@ def _print_deathmatch_result_table(
     countries: list[str],
     provinces: list[str | None],
     player_numbers: list[int | None],
-    sex: str,
-    start_age: int,
+    sex: str | None = None,
+    sexes: list[str] | None = None,
+    start_age: int = 0,
     winner_idx: int | None,
     win_mode: str,
 ) -> None:
     """Print a compact two-column post-match comparison, sports-card style."""
     terminal_columns = max(80, shutil.get_terminal_size(fallback=(180, 24)).columns)
     column_width = max(36, min(100, (terminal_columns - 3) // 2))
+    resolved_sexes = list(sexes) if sexes is not None else [str(sex), str(sex)]
     labels = [
         deathmatch_contestant_label(
-            countries[i], sex, province=provinces[i], player_number=player_numbers[i]
+            countries[i], resolved_sexes[i], province=provinces[i], player_number=player_numbers[i]
         )
         for i in range(2)
     ]
     stats = [
-        _deathmatch_compact_stats(contexts[i], states[i], sex=sex, start_age=start_age)
+        _deathmatch_compact_stats(contexts[i], states[i], sex=resolved_sexes[i], start_age=start_age)
         for i in range(2)
     ]
     # Both cards intentionally use the same ordered row schema. If one side lacks
@@ -9521,19 +9821,45 @@ def _print_deathmatch_result_table(
     print(_deathmatch_grid_rule(column_width, junction="┼"))
 
     label_width = max(12, max((_terminal_display_width(key) for key in row_order), default=12))
-    for key in row_order:
-        left_lines = _deathmatch_result_cell_lines(
-            key, maps[0].get(key, "—"), column_width=column_width, label_width=label_width
-        )
-        right_lines = _deathmatch_result_cell_lines(
-            key, maps[1].get(key, "—"), column_width=column_width, label_width=label_width
-        )
-        line_count = max(len(left_lines), len(right_lines))
-        blank_cell = " " * column_width
-        for line_index in range(line_count):
-            left_cell = left_lines[line_index] if line_index < len(left_lines) else blank_cell
-            right_cell = right_lines[line_index] if line_index < len(right_lines) else blank_cell
-            print(f"{left_cell} │ {right_cell}")
+    traffic_keys = {"ROAD USER", "IMPAIRMENT", "IMPAIRMENT p", "IMPAIR ROLL", "IMPAIR MODEL", "SCOPE"}
+    substance_keys = {"AGENT(S)", "CONTEXT", "CONTEXT p", "CONTEXT ROLL", "CONTEXT MODEL"}
+    alcohol_keys = {"EXPOSURE", "ETHANOL", "🍷 WINE EQUIV.", "🥃 VODKA EQUIV.", "SURVIVAL"}
+    death_rows = [key for key in row_order if key not in traffic_keys and key not in substance_keys and key not in alcohol_keys]
+    traffic_rows = [key for key in row_order if key in traffic_keys]
+    substance_rows = [key for key in row_order if key in substance_keys]
+    alcohol_rows = [key for key in row_order if key in alcohol_keys]
+
+    def print_rows(keys: list[str]) -> None:
+        for key in keys:
+            left_lines = _deathmatch_result_cell_lines(
+                key, maps[0].get(key, "—"), column_width=column_width, label_width=label_width
+            )
+            right_lines = _deathmatch_result_cell_lines(
+                key, maps[1].get(key, "—"), column_width=column_width, label_width=label_width
+            )
+            line_count = max(len(left_lines), len(right_lines))
+            blank_cell = " " * column_width
+            for line_index in range(line_count):
+                left_cell = left_lines[line_index] if line_index < len(left_lines) else blank_cell
+                right_cell = right_lines[line_index] if line_index < len(right_lines) else blank_cell
+                print(f"{left_cell} │ {right_cell}")
+
+    print_rows(death_rows)
+    if traffic_rows:
+        print(_deathmatch_grid_rule(column_width, junction="┼"))
+        traffic_heading = _terminal_pad("🚗 CRASH CONTEXT", column_width)
+        print(f"{traffic_heading} │ {traffic_heading}")
+        print_rows(traffic_rows)
+    if substance_rows:
+        print(_deathmatch_grid_rule(column_width, junction="┼"))
+        substance_heading = _terminal_pad("💊 SUBSTANCES", column_width)
+        print(f"{substance_heading} │ {substance_heading}")
+        print_rows(substance_rows)
+    if alcohol_rows:
+        print(_deathmatch_grid_rule(column_width, junction="┼"))
+        alcohol_heading = _terminal_pad("🍸 ALCOHOL", column_width)
+        print(f"{alcohol_heading} │ {alcohol_heading}")
+        print_rows(alcohol_rows)
 
     # Close the final sports-card grid before the blank line and winner banner.
     print(_deathmatch_grid_rule(column_width, junction="┴"))
@@ -9672,13 +9998,14 @@ def _print_deathmatch_batch_causes(
 def run_deathmatch_batch(
     args: argparse.Namespace,
     *,
-    selection: str,
+    selections: list[str],
+    shared_sex: bool,
     countries: list[str],
     provinces: list[str | None],
     player_numbers: list[int | None],
     contexts: list[dict[str, object]],
     match_seed: int,
-    sex_rng: random.Random,
+    sex_rngs: list[random.Random],
     mortality_rngs: list[random.Random],
 ) -> int:
     """Run many paired Deathmatches using exact precomputed age CDFs per side/sex."""
@@ -9687,14 +10014,14 @@ def run_deathmatch_batch(
         print("--runs must be > 0", file=sys.stderr)
         return 2
 
-    needed_sexes = ("male", "female") if selection == "r" else (("male",) if selection == "m" else ("female",))
     cdfs: list[dict[str, tuple[list[int], list[float]]]] = [{}, {}]
     for idx, ctx in enumerate(contexts):
         _activate_deathmatch_context(ctx)
         country = countries[idx]
-        for sex in needed_sexes:
-            cdfs[idx][sex] = build_death_age_cdf(
-                sex,
+        needed = ("male", "female") if selections[idx] == "r" else (("male",) if selections[idx] == "m" else ("female",))
+        for resolved_sex in needed:
+            cdfs[idx][resolved_sex] = build_death_age_cdf(
+                resolved_sex,
                 start_age=args.start_age,
                 use_record_cap=(country != "ca" and not args.exceptional_tail),
                 alcohol_cause_source=ctx.get("cause_source"),
@@ -9704,7 +10031,7 @@ def run_deathmatch_batch(
     cause_cells_by_side: list[Counter[tuple[str, int]]] = [Counter(), Counter()]
     wins = [0, 0]
     draws = 0
-    sex_counts: Counter[str] = Counter()
+    sex_counts_by_side: list[Counter[str]] = [Counter(), Counter()]
     margin_counts: Counter[int] = Counter()
     left_10 = 0
     right_10 = 0
@@ -9719,14 +10046,20 @@ def run_deathmatch_batch(
         print("Running batch Deathmatch simulations...", flush=True)
 
     for i in range(runs):
-        sex = choose_sex(selection, sex_rng)
-        sex_counts[sex] += 1
+        if shared_sex:
+            resolved = choose_sex(selections[0], sex_rngs[0])
+            sexes = [resolved, resolved]
+        else:
+            sexes = [choose_sex(selections[idx], sex_rngs[idx]) for idx in (0, 1)]
+        for idx in (0, 1):
+            sex_counts_by_side[idx][sexes[idx]] += 1
+
         pair: list[int] = []
         for idx in (0, 1):
-            cdf_ages, cdf_values = cdfs[idx][sex]
+            cdf_ages, cdf_values = cdfs[idx][sexes[idx]]
             age = sample_death_age_cdf(mortality_rngs[idx], cdf_ages, cdf_values)
             age_counts_by_side[idx][age] += 1
-            cause_cells_by_side[idx][(sex, age)] += 1
+            cause_cells_by_side[idx][(sexes[idx], age)] += 1
             pair.append(age)
         winner_idx, _result_age = _deathmatch_result(pair, args.deathmatch_win)
         if winner_idx is None:
@@ -9773,13 +10106,16 @@ def run_deathmatch_batch(
         )
 
     labels = [
-        deathmatch_contestant_label(countries[i], "male" if selection == "m" else "female" if selection == "f" else None,
-                                    province=provinces[i], player_number=player_numbers[i])
+        deathmatch_contestant_label(
+            countries[i],
+            "male" if selections[i] == "m" else "female" if selections[i] == "f" else "random",
+            province=provinces[i],
+            player_number=player_numbers[i],
+        )
         for i in (0, 1)
     ]
-    # For random-sex batches, contestant labels should not imply one fixed sex.
-    if selection == "r":
-        labels = [country_display_label(countries[i], province=provinces[i]).upper() for i in (0, 1)]
+    # Player identity stays explicit even when legacy --sex r means neither
+    # side has one fixed sex across a batch. Geography remains unchanged.
 
     print()
     print(_terminal_rule())
@@ -9788,10 +10124,23 @@ def run_deathmatch_batch(
     print(f"{labels[0]}  ⚔  {labels[1]}")
     print(f"matches: {runs:,}")
     print(f"starting age: {args.start_age}")
-    if selection == "r":
-        print(f"sex: random but shared within each match | male {sex_counts['male'] / runs * 100:.2f}% | female {sex_counts['female'] / runs * 100:.2f}%")
+    if shared_sex:
+        if selections[0] == "r":
+            counts = sex_counts_by_side[0]
+            print(f"sex: random but shared within each match | male {counts['male'] / runs * 100:.2f}% | female {counts['female'] / runs * 100:.2f}%")
+        else:
+            print(f"sex: {'male' if selections[0] == 'm' else 'female'}")
     else:
-        print(f"sex: {'male' if selection == 'm' else 'female'}")
+        sex_parts = []
+        for idx in (0, 1):
+            if selections[idx] == "r":
+                counts = sex_counts_by_side[idx]
+                sex_parts.append(
+                    f"PLAYER {idx + 1} random (male {counts['male'] / runs * 100:.2f}%, female {counts['female'] / runs * 100:.2f}%)"
+                )
+            else:
+                sex_parts.append(f"PLAYER {idx + 1} {'male' if selections[idx] == 'm' else 'female'}")
+        print("player sexes: " + " | ".join(sex_parts))
     print(
         "win condition: LONGEVITY (long) — later death wins"
         if args.deathmatch_win == "long"
@@ -9808,14 +10157,14 @@ def run_deathmatch_batch(
         if ACTIVE_ALCOHOL_MODEL == "cause-hazard-prototype":
             print(f"cause-hazard weight model: {cause_hazard_weight_model_label()}")
             if ACTIVE_CAUSE_HAZARD_WEIGHT_MODEL in {"evidence-v3-popdist", "evidence-v4-cancer"}:
-                if selection in {"m", "f"}:
-                    batch_sex = "male" if selection == "m" else "female"
-                    for idx, country in enumerate(countries):
+                for idx, country in enumerate(countries):
+                    if selections[idx] in {"m", "f"}:
+                        batch_sex = "male" if selections[idx] == "m" else "female"
                         side = country_display_label(country, province=provinces[idx])
                         for line in alcohol_population_distribution_summary(country, batch_sex):
                             print(f"{side} {line}")
-                else:
-                    print("population exposure model: WHO-style Gamma E[RR], resolved separately for each match sex")
+                    else:
+                        print(f"{country_display_label(country, province=provinces[idx])} population exposure model: WHO-style Gamma E[RR], resolved separately for each match sex")
                 if ACTIVE_CAUSE_HAZARD_WEIGHT_MODEL == "evidence-v4-cancer":
                     print("evidence-v4 coverage: v3 direct-alcohol normalization + Dai 2026 cancer subhazards; remaining non-cancer mappings use proxy-v1")
                 else:
@@ -9841,7 +10190,7 @@ def run_deathmatch_batch(
         counts = age_counts_by_side[idx]
         mean_age = sum(age * count for age, count in counts.items()) / runs
         print(
-            f"{labels[idx]}: mean {mean_age:.2f} | median {_deathmatch_batch_percentile_counts(counts, 0.50)} | "
+            f"{labels[idx]} | mean {mean_age:.2f} | median {_deathmatch_batch_percentile_counts(counts, 0.50)} | "
             f"p10 {_deathmatch_batch_percentile_counts(counts, 0.10)} | p90 {_deathmatch_batch_percentile_counts(counts, 0.90)} | "
             f"min {min(counts)} | max {max(counts)}"
         )
@@ -9883,7 +10232,8 @@ def run_deathmatch_batch(
     return 0
 
 
-def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
+
+def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
     """Run two countries side-by-side with independently rolled mortality."""
     global DATA_PREFLIGHT_COMPLETE, ACTIVE_COUNTRY, ACTIVE_PERIOD_SOURCE
 
@@ -9895,7 +10245,21 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     if len(provinces) != 2:
         provinces = [None, None]
     same_country = countries[0] == countries[1]
-    player_numbers: list[int | None] = [1, 2] if same_country else [None, None]
+    player_mode = bool(getattr(args, "player_mode", False))
+    # Deathmatch is always a two-player presentation regardless of whether the
+    # contestants came from --player or the legacy --deathmatch interface.
+    player_numbers: list[int | None] = [1, 2]
+    if player_mode:
+        selections = list(getattr(args, "player_selections", []))
+        if len(selections) != 2:
+            print("internal player error: expected exactly two sex selections", file=sys.stderr)
+            return 2
+    else:
+        if selection not in {"m", "f", "r"}:
+            print("internal deathmatch error: missing shared sex selection", file=sys.stderr)
+            return 2
+        selections = [selection, selection]
+    shared_sex = not player_mode
     if args.log:
         print("--log is not supported with --deathmatch yet", file=sys.stderr)
         return 2
@@ -9913,15 +10277,27 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     args.seasonality = not batch_mode
     cause_detail_mode = "broad" if batch_mode else ("tree" if args.cause_detail == "auto" else args.cause_detail)
 
-    # Share only the contestant sex. Mortality rolls themselves MUST be
-    # independent: each player gets a deterministic contestant-specific RNG
-    # stream derived from the match seed. This remains true even when both
-    # players use the same country's mortality table.
+    # Legacy --deathmatch keeps its historical shared-sex stream. --player
+    # gives each contestant an independent deterministic sex stream so :r can
+    # resolve independently without perturbing either mortality stream.
     match_seed = args.seed
     if match_seed is None:
         match_seed = random.SystemRandom().randrange(0, 2**63)
-    sex_rng = random.Random(match_seed ^ 0x534558)
-    sex = None if batch_mode else choose_sex(selection, sex_rng)
+    if shared_sex:
+        shared_sex_rng = random.Random(match_seed ^ 0x534558)
+        sex_rngs = [shared_sex_rng, shared_sex_rng]
+    else:
+        sex_rngs = [
+            _deathmatch_rng(match_seed, countries[idx], 0x534558, contestant_index=idx)
+            for idx in (0, 1)
+        ]
+    if batch_mode:
+        sexes = None
+    elif shared_sex:
+        resolved_sex = choose_sex(selections[0], sex_rngs[0])
+        sexes = [resolved_sex, resolved_sex]
+    else:
+        sexes = [choose_sex(selections[idx], sex_rngs[idx]) for idx in (0, 1)]
     mortality_rngs = [
         _deathmatch_rng(
             match_seed,
@@ -9966,25 +10342,26 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     if batch_mode:
         return run_deathmatch_batch(
             args,
-            selection=selection,
+            selections=selections,
+            shared_sex=shared_sex,
             countries=countries,
             provinces=provinces,
             player_numbers=player_numbers,
             contexts=contexts,
             match_seed=match_seed,
-            sex_rng=sex_rng,
+            sex_rngs=sex_rngs,
             mortality_rngs=mortality_rngs,
         )
 
-    assert sex is not None
+    assert sexes is not None
     print()
     print(_terminal_rule())
     print(f"=== MORTALITY ROULETTE v{VERSION} — DEATHMATCH ===")
     print(_terminal_rule())
     print(
-        f"{deathmatch_contestant_label(countries[0], sex, province=provinces[0], player_number=player_numbers[0])}"
+        f"{deathmatch_contestant_label(countries[0], sexes[0], province=provinces[0], player_number=player_numbers[0])}"
         f"  ⚔  "
-        f"{deathmatch_contestant_label(countries[1], sex, province=provinces[1], player_number=player_numbers[1])}"
+        f"{deathmatch_contestant_label(countries[1], sexes[1], province=provinces[1], player_number=player_numbers[1])}"
     )
     if same_country:
         print(
@@ -9996,9 +10373,15 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
             f"countries: {country_display_label(countries[0], province=provinces[0])} vs "
             f"{country_display_label(countries[1], province=provinces[1])}"
         )
-    print(f"sex: {sex}")
-    if selection == "r":
-        print(f"random sex selection shared by both contestants: {sex}")
+    if shared_sex:
+        print(f"sex: {sexes[0]}")
+        if selections[0] == "r":
+            print(f"random sex selection shared by both contestants: {sexes[0]}")
+    else:
+        print(f"player sexes: PLAYER 1 {sexes[0]} | PLAYER 2 {sexes[1]}")
+        for idx in (0, 1):
+            if selections[idx] == "r":
+                print(f"PLAYER {idx + 1} random sex selection: {sexes[idx]}")
     if args.deathmatch_win == "long":
         print("deathmatch win condition: LONGEVITY (long) — last contestant standing wins; same-age tap-outs = draw")
     else:
@@ -10023,9 +10406,16 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
             print(line)
         print(f"shared alcohol risk engine: {alcohol_model_label()}")
         if ACTIVE_ALCOHOL_MODEL == "legacy":
-            print(
-                f"sex-specific all-cause RR target at this dose: ×{boozehound_all_cause_target_rr(sex):.2f}"
-            )
+            if sexes[0] == sexes[1]:
+                print(
+                    f"sex-specific all-cause RR target at this dose: ×{boozehound_all_cause_target_rr(sexes[0]):.2f}"
+                )
+            else:
+                for idx in (0, 1):
+                    print(
+                        f"PLAYER {idx + 1} sex-specific all-cause RR target at this dose: "
+                        f"×{boozehound_all_cause_target_rr(sexes[idx]):.2f}"
+                    )
         else:
             print(f"shared cause-hazard weight model: {cause_hazard_weight_model_label()}")
             for idx, country in enumerate(countries):
@@ -10035,10 +10425,10 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
                 else:
                     print(f"{side} hazard input: WHO Canada complete-ICD causes by sex + age (national cause geography)")
                 if ACTIVE_CAUSE_HAZARD_WEIGHT_MODEL in {"evidence-v3-popdist", "evidence-v4-cancer"}:
-                    for line in alcohol_population_distribution_summary(country, sex):
+                    for line in alcohol_population_distribution_summary(country, sexes[idx]):
                         print(f"{side} {line}")
                 elif ACTIVE_CAUSE_HAZARD_WEIGHT_MODEL == "evidence-v2-popnorm":
-                    anchor_g, source = alcohol_population_anchor(country, sex)
+                    anchor_g, source = alcohol_population_anchor(country, sexes[idx])
                     print(
                         f"{side} population-normalization anchor: {anchor_g:.1f} g/day mean-dose equivalent | {source}"
                     )
@@ -10067,10 +10457,10 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     print()
 
     left_label = deathmatch_contestant_label(
-        countries[0], sex, province=provinces[0], player_number=player_numbers[0]
+        countries[0], sexes[0], province=provinces[0], player_number=player_numbers[0]
     )
     right_label = deathmatch_contestant_label(
-        countries[1], sex, province=provinces[1], player_number=player_numbers[1]
+        countries[1], sexes[1], province=provinces[1], player_number=player_numbers[1]
     )
     terminal_columns = shutil.get_terminal_size(fallback=(180, 24)).columns
     # 72 cells/side is enough for the compact annual row. Wider terminals get
@@ -10094,7 +10484,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
                 ctx,
                 state,
                 age=age,
-                sex=sex,
+                sex=sexes[idx],
                 exceptional_tail=args.exceptional_tail,
                 mortality_roll=mortality_roll,
             )
@@ -10118,7 +10508,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
                     provinces=provinces,
                     player_numbers=player_numbers,
                     states=states,
-                    sex=sex,
+                    sexes=sexes,
                     column_width=column_width,
                     blink=True,
                 ),
@@ -10128,7 +10518,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
         for idx in newly_dead:
             states[idx]["cause_stack"] = _deathmatch_roll_cause_stack(
                 contexts[idx],
-                sex=sex,
+                sex=sexes[idx],
                 age=int(states[idx]["death_age"]),
                 cause_detail_mode=cause_detail_mode,
             )
@@ -10140,11 +10530,11 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     # Both eventual death cards are printed regardless of win mode. This
     # preserves the full underlying mechanics and gives both players complete
     # comparable outcomes.
-    for ctx, state in zip(contexts, states):
+    for idx, (ctx, state) in enumerate(zip(contexts, states)):
         _print_deathmatch_final_card(
             ctx,
             state,
-            sex=sex,
+            sex=sexes[idx],
             start_age=args.start_age,
             cause_detail_mode=cause_detail_mode,
         )
@@ -10157,7 +10547,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
     print("=" * _terminal_display_width(result_heading))
     _print_deathmatch_result_table(
         contexts, states, countries=countries, provinces=provinces,
-        player_numbers=player_numbers, sex=sex, start_age=args.start_age,
+        player_numbers=player_numbers, sexes=sexes, start_age=args.start_age,
         winner_idx=winner_idx, win_mode=args.deathmatch_win,
     )
 
@@ -10168,7 +10558,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str) -> int:
         winner_country = countries[winner_idx]
         winner_label = deathmatch_contestant_label(
             winner_country,
-            sex,
+            sexes[winner_idx],
             province=provinces[winner_idx],
             player_number=player_numbers[winner_idx],
         )
@@ -10219,14 +10609,25 @@ def parse_args() -> argparse.Namespace:
             "one code creates two independent players from that country; the mode defaults to full cause/timing detail and no alcohol exposure"
         ),
     )
+    country.add_argument(
+        "--player",
+        action="append",
+        metavar="SPEC",
+        help=(
+            "repeat exactly twice for independently configured Deathmatch contestants; "
+            "format COUNTRY[:PROVINCE]:SEX, e.g. --player ca:on:m --player fi:f. "
+            "SEX is m/f/r; Canadian province is optional and omitted means national Canada"
+        ),
+    )
     p.add_argument(
         "--ca-province",
         nargs="+",
         metavar="PROVINCE",
         help=(
-            "Canadian province selector for --country ca / --canada / --deathmatch; "
+            "Canadian province selector for --country ca / --canada / legacy --deathmatch; "
             "use postal codes such as bc, on, ab, qc (or quoted full names). In Canada-vs-Canada deathmatch, "
-            "one value applies to both players and two values map left-to-right. Use 'national' for Canada-wide data."
+            "one value applies to both players and two values map left-to-right. Use 'national' for Canada-wide data. "
+            "With --player, put the province inside each player spec instead."
         ),
     )
     p.add_argument(
@@ -10525,7 +10926,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--runs",
         type=int,
-        help="batch mode: simulate N lives, or N paired matches with --deathmatch, and print aggregate statistics",
+        help="batch mode: simulate N lives, or N paired matches with --deathmatch/--player, and print aggregate statistics",
     )
     p.add_argument(
         "--no-progress",
@@ -10557,11 +10958,32 @@ def main() -> int:
     args = parse_args()
     _print_startup_banner()
 
-    # --deathmatch accepts either one country (same-country two-player shorthand)
-    # or two countries.  Normalize to exactly two contestants before any backend
-    # initialization so the rest of the engine has one simple invariant.
+    # Normalize both the legacy --deathmatch interface and the compact repeatable
+    # --player interface to the same two-contestant internal representation.
     deathmatch_single_country = False
-    if args.deathmatch:
+    args.player_mode = bool(args.player)
+    args.player_specs = []
+    args.player_selections = []
+    if args.player:
+        if len(args.player) != 2:
+            print("--player must be supplied exactly twice", file=sys.stderr)
+            return 2
+        if args.sex is not None:
+            print("argument error: --sex/--gender cannot be combined with --player; sex belongs in each player spec", file=sys.stderr)
+            return 2
+        if args.ca_province:
+            print("argument error: --ca-province cannot be combined with --player; put the province inside each player spec", file=sys.stderr)
+            return 2
+        try:
+            specs = [parse_player_spec(raw) for raw in args.player]
+        except ValueError as exc:
+            print(f"argument error: {exc}", file=sys.stderr)
+            return 2
+        args.player_specs = specs
+        args.deathmatch = [spec.country for spec in specs]
+        args.deathmatch_provinces = [spec.province for spec in specs]
+        args.player_selections = [spec.sex_selection for spec in specs]
+    elif args.deathmatch:
         raw_deathmatch = list(args.deathmatch)
         if len(raw_deathmatch) == 1:
             deathmatch_single_country = True
@@ -10581,10 +11003,13 @@ def main() -> int:
     # Canada-vs-Canada can use different provincial mortality/seasonality data.
     try:
         if args.deathmatch:
-            _single_province, deathmatch_provinces = resolve_canada_province_assignments(
-                list(args.deathmatch), args.ca_province
-            )
-            args.deathmatch_provinces = deathmatch_provinces
+            if args.player_mode:
+                deathmatch_provinces = list(args.deathmatch_provinces)
+            else:
+                _single_province, deathmatch_provinces = resolve_canada_province_assignments(
+                    list(args.deathmatch), args.ca_province
+                )
+                args.deathmatch_provinces = deathmatch_provinces
             ACTIVE_CANADA_PROVINCE = (
                 deathmatch_provinces[0] if ACTIVE_COUNTRY == "ca" else None
             )
@@ -10601,7 +11026,7 @@ def main() -> int:
         return 2
 
     selection = args.sex
-    if selection is None:
+    if not args.player_mode and selection is None:
         while True:
             selection = input("Choose sex: (m)ale, (f)emale, (r)andom: ").strip().lower()
             if selection in {"m", "f", "r"}:
@@ -10671,12 +11096,7 @@ def main() -> int:
             return 2
     if args.deathmatch:
         dm_provinces = list(args.deathmatch_provinces)
-        base_labels = [
-            deathmatch_contestant_label(args.deathmatch[i], "m", province=dm_provinces[i])
-            for i in range(2)
-        ]
-        duplicate_labels = base_labels[0] == base_labels[1]
-        notice_players = [1, 2] if duplicate_labels else [None, None]
+        notice_players = [1, 2]
         if deathmatch_single_country:
             print(
                 "[ATTN] Only one country selected; starting a same-country deathmatch: "
@@ -10782,6 +11202,16 @@ def main() -> int:
     )
     x41_drug_class_rng = random.Random(
         None if args.seed is None else (args.seed ^ 0x58343144)
+    )
+    # Separate stream: X44 substance-count context is downstream-only and must
+    # not perturb the legacy X41 class stream or any mortality/cause roll.
+    x44_substance_context_rng = random.Random(
+        None if args.seed is None else (args.seed ^ 0x58343453)
+    )
+    # Separate stream: road-crash impairment context is downstream-only and
+    # must not perturb mortality/cause/detail/substance/place rolls.
+    traffic_context_rng = random.Random(
+        None if args.seed is None else (args.seed ^ 0x54524649)
     )
     # Separate stream: generalized PLACE enrichment is downstream-only and
     # must not perturb mortality/cause/detail or the legacy X80 stream.
@@ -10922,7 +11352,7 @@ def main() -> int:
                 raise CauseDataError("internal error: Canadian WHO raw source missing")
             detail_resolver = CanadaCauseDetailResolver(canada_raw)
         else:
-            detail_resolver = CauseDetailResolver(cache_path=(args.detail_cache or (DEFAULT_DETAIL_CACHE if args.refresh_detail else BUNDLED_STATFIN_DETAIL)), refresh=args.refresh_detail)
+            detail_resolver = _statfin_detail_resolver_from_args(args)
 
     # DEV9 v4 needs the StatFin 11be neoplasm partition even when cause-detail
     # output is broad/off, because the same children now build the annual
@@ -10933,9 +11363,7 @@ def main() -> int:
         and ACTIVE_CAUSE_HAZARD_WEIGHT_MODEL == "evidence-v4-cancer"
     ):
         if detail_resolver is None:
-            detail_resolver = CauseDetailResolver(
-                cache_path=(args.detail_cache or (DEFAULT_DETAIL_CACHE if args.refresh_detail else BUNDLED_STATFIN_DETAIL)), refresh=args.refresh_detail
-            )
+            detail_resolver = _statfin_detail_resolver_from_args(args)
         if isinstance(cause_source, CauseOfDeathSource):
             setattr(cause_source, "_alcohol_detail_resolver", detail_resolver)
         if isinstance(alcohol_cause_source, CauseOfDeathSource):
@@ -11092,6 +11520,8 @@ def main() -> int:
         suicide_reason_rng=suicide_reason_rng,
         x80_location_rng=x80_location_rng,
         x41_drug_class_rng=x41_drug_class_rng,
+        x44_substance_context_rng=x44_substance_context_rng,
+        traffic_context_rng=traffic_context_rng,
         place_rng=place_rng,
         cause_detail_mode=cause_detail_mode,
         seasonal_source=seasonal_source,

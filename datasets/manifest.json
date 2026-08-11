@@ -4,7 +4,8 @@
   "notes": [
     "Bundled snapshots are runtime defaults only where coverage exists.",
     "Explicit cache paths and refresh/download paths remain supported.",
-    "WHO ICD-10 terminology has separate licensing conditions."
+    "WHO ICD-10 terminology has separate licensing conditions.",
+    "Bundled dataset files are immutable release snapshots; runtime refresh/lazy caches are stored separately."
   ],
   "datasets": [
     {
@@ -37,8 +38,8 @@
       "url": "https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/",
       "license": "CC BY 4.0",
       "attribution": "Statistics Finland, causes of death; StatFin detailed cause tables.",
-      "sha256": "d1677fc071702c5099d1bad115d64cbb83964d73c5cf8b88757696fa1a8932d0",
-      "bytes": 367804
+      "sha256": "05da9ab7a4729ad701e2301d315f755d0e0ab5eee86d9b4d8801d4a5fec5e09e",
+      "bytes": 374077
     },
     {
       "path": "datasets/finland/seasonality/statfin_11bf_through_2024.json",
@@ -120,13 +121,13 @@
     {
       "path": "datasets/external_causes/conditional_context_model_v1.json",
       "agency": "Mortality Roulette evidence model (Canadian, Finnish, Swiss and Taiwanese published/official sources)",
-      "source": "Conditional external-cause context model v1 (X80 location type; X41 drug class)",
-      "reference": "Toronto 1993-2007; Switzerland 1990-2003; Taipei 2002-2005; Finland 2000-2009; Canada 2016-2017",
+      "source": "Conditional external-cause context model v1 (X80; X40-X44 substances; road-crash impairment)",
+      "reference": "Toronto 1993-2007; Switzerland 1990-2003; Taipei 2002-2005; Finland poisoning 2000-2009; WHO ICD-10; Canada acute toxicity 2016-2017; Finland road crashes 2015-2024; Canada fatal collisions 2022",
       "url": "datasets/README.md",
       "license": "Project-authored derived model; source publications/data retain their respective rights",
       "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
-      "sha256": "9b1e8ffe7fd3905e36d691f1eeaa7fca53ebdf74a7361fe98c540df609e442b5",
-      "bytes": 9109
+      "sha256": "3d0e243e177f09a6ead9f8f13d17f1f83f35b951ef539de304a5067d68ad23b9",
+      "bytes": 21274
     },
     {
       "path": "datasets/places/cause_place_model_v1.json",

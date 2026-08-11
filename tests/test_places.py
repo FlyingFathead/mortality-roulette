@@ -326,6 +326,13 @@ class PlaceRenderingTests(unittest.TestCase):
                     "available": True, "label": "Benzodiazepines / sedative-hypnotics",
                     "model_label": "Canada", "profile": "male",
                 },
+                "substance_context": {
+                    "available": True, "context_id": "X41_DRUG_CLASS",
+                    "agent_label": "Benzodiazepines / sedative-hypnotics",
+                    "context_label": "Modeled broad drug class within ICD-10 X41",
+                    "model_label": "Canada", "profile": "male",
+                    "conditional_probability": 0.5, "roll": 0.4,
+                },
                 "place": {
                     "available": True, "label": "Personal residence",
                     "model_label": "Canada | accidental acute-toxicity event setting",
@@ -341,10 +348,13 @@ class PlaceRenderingTests(unittest.TestCase):
         finally:
             mr.ACTIVE_COUNTRY = old_country
             mr.ACTIVE_CANADA_PROVINCE = old_province
-        drug_i = rows.index(("💊 DRUG CLASS", "Benzodiazepines / sedative-hypnotics"))
-        self.assertEqual(rows[drug_i + 1], ("   DRUG MODEL", "Canada | male"))
         place_i = rows.index(("📍 PLACE", "Personal residence"))
-        self.assertGreater(place_i, drug_i)
+        agent_i = rows.index(("AGENT(S)", "Benzodiazepines / sedative-hypnotics"))
+        self.assertGreater(agent_i, place_i)
+        self.assertEqual(rows[agent_i + 1], ("CONTEXT", "Modeled broad drug class within ICD-10 X41"))
+        self.assertEqual(rows[agent_i + 2], ("CONTEXT p", "50.00%"))
+        self.assertEqual(rows[agent_i + 3], ("CONTEXT ROLL", "40.0000%"))
+        self.assertEqual(rows[agent_i + 4], ("CONTEXT MODEL", "Canada | male"))
         self.assertEqual(rows[place_i + 1], ("   PLACE p", "62.00%"))
         self.assertEqual(rows[place_i + 2], ("   PLACE ROLL", "40.0000%"))
         self.assertEqual(

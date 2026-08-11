@@ -178,6 +178,227 @@
           "use": "Canada national sex-specific substance-class counts"
         }
       ]
+    },
+    "X44_SUBSTANCE_COUNT_CONTEXT": {
+      "trigger_icd": [
+        "X44"
+      ],
+      "heading": "SUBSTANCES",
+      "compact_row": "SUBSTANCES",
+      "categories": {
+        "multiple_categories": "Multiple drugs from different categories",
+        "single_other_unspecified": "One other / unspecified drug",
+        "unknown_count": "Drug(s) not specified"
+      },
+      "models": {
+        "CA": {
+          "label": "Canada | accidental acute-toxicity reference",
+          "profiles": {
+            "all": {
+              "distribution": {
+                "multiple_categories": 0.64,
+                "single_other_unspecified": 0.29,
+                "unknown_count": 0.07
+              },
+              "provenance": "PHAC national coroner/medical-examiner chart review, Canada 2016-2017. Among accidental acute-toxicity deaths, the published distribution of the number of substance types identified as causing death was 29% one substance, 7% unknown, and therefore 64% two or more substances at the published whole-percent resolution. Applied to X44 only as a labeled accidental-acute-toxicity reference for substance-count context; it is not an X44-specific cross-tab and does not identify exact molecules.",
+              "model_status": "Canada national accidental acute-toxicity reference; not X44-specific"
+            }
+          }
+        }
+      },
+      "country_model_map": {
+        "CA": "CA"
+      },
+      "fallback_model": "CA",
+      "sources": [
+        {
+          "title": "ICD-10 Volume 2: Special instructions on poisoning by drugs, medicaments and biological substances",
+          "authors": "World Health Organization",
+          "year": 2016,
+          "url": "https://icd.who.int/browse10/content/statichtml/icd10volume2_en_2016.pdf",
+          "use": "X44 mortality-coding semantics for multidrug poisonings when no drug is identified as most important"
+        },
+        {
+          "title": "Substance-related acute toxicity deaths in Canada from 2016 to 2017",
+          "authors": "Public Health Agency of Canada",
+          "year": "2016-2017",
+          "url": "https://www.canada.ca/en/health-canada/services/opioids/data-surveillance-research/substance-related-acute-toxicity-deaths-canada-2016-2017-review-coroner-medical-examiner-files.html",
+          "use": "Accidental-death distribution of number of substance types identified as causing death"
+        }
+      ]
+    },
+    "FI_FATAL_MOTOR_VEHICLE_IMPAIRMENT": {
+      "heading": "CRASH CONTEXT",
+      "compact_row": "IMPAIRMENT",
+      "scope": "Crash-level: status of the at-fault driver; does not establish that the simulated decedent was the impaired driver.",
+      "semantic": "crash_level_at_fault_driver_impairment",
+      "categories": {
+        "alcohol_only": "Alcohol only (impaired at-fault driver)",
+        "alcohol_plus_other": "Alcohol + another intoxicant (impaired at-fault driver)",
+        "other_intoxicant": "Other intoxicant, no alcohol (impaired at-fault driver)",
+        "impaired_type_unknown": "Impaired at-fault driver; intoxicant type unavailable",
+        "clear_at_fault_driver": "No impaired at-fault driver recorded",
+        "status_unknown": "At-fault driver impairment status unavailable"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | OTI fatal motor-vehicle crashes 2015-2024",
+          "distribution": {
+            "alcohol_only": 0.1784260515603799,
+            "alcohol_plus_other": 0.08005427408412483,
+            "other_intoxicant": 0.09430122116689281,
+            "impaired_type_unknown": 0.004070556309362279,
+            "clear_at_fault_driver": 0.6037991858887382,
+            "status_unknown": 0.03934871099050204
+          },
+          "provenance": "OTI road-accident investigation-board review, 2015-2024: 1,474 fatal motor-vehicle crashes. 526 were caused by impaired drivers. Among those 526: alcohol only n=263, alcohol plus another intoxicant n=118, other intoxicant without alcohol n=139, and n=6 could not be classified due to incomplete information. Figure 1 gives 890 crashes caused by clear drivers and 58 with impairment information unavailable. Percent calculations in the report use cases with required information; this model preserves the unknown category instead of dropping it.",
+          "model_status": "Finland national fatal-crash investigation reference; crash-level, not decedent-specific"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "fallback_model": "FI",
+      "sources": [
+        {
+          "title": "Päihdeonnettomuudet vuosina 2015–2024",
+          "authors": "Onnettomuustietoinstituutti (OTI)",
+          "year": 2026,
+          "url": "https://www.lvk.fi/api/v2/document/628668/B20695E1B6A739A4910A9899E901F70CF5044D7D6E20E36ED5EAF4BB5570AE52",
+          "use": "Finnish fatal-road-crash driver impairment and deceased pedestrian/cyclist intoxication reference counts"
+        },
+        {
+          "title": "11b2 -- Accidental and violent deaths by underlying cause of death (short list of external causes), age and sex, intoxicated separately, 1998-2024",
+          "authors": "Statistics Finland",
+          "year": "1998-2024",
+          "url": "https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/11b2.px",
+          "use": "Confirms death-certificate contributing-cause alcohol/drug intoxication is available by external cause, age, sex and year; exact cross-tab cells are not bundled in this model yet"
+        }
+      ]
+    },
+    "FI_TRAFFIC_CYCLIST_INTOXICATION": {
+      "heading": "CRASH CONTEXT",
+      "compact_row": "IMPAIRMENT",
+      "scope": "Deceased road user: intoxication status of the cyclist who died.",
+      "semantic": "decedent_intoxication",
+      "categories": {
+        "alcohol_involved": "Alcohol involved",
+        "other_intoxicant": "Other intoxicant(s), no alcohol recorded",
+        "no_intoxication": "No intoxication recorded",
+        "status_unknown": "Intoxication status unavailable"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | OTI deceased cyclists 2015-2024",
+          "distribution": {
+            "alcohol_involved": 0.1875,
+            "other_intoxicant": 0.03125,
+            "no_intoxication": 0.675,
+            "status_unknown": 0.10625
+          },
+          "provenance": "OTI review of 160 cyclists killed in Finnish road traffic in 2015-2024: 35 were intoxicated; 30 of the intoxicated cyclists had alcohol involved. The report figure/table implies 108 clear and 17 with intoxication status unavailable; the remaining 5 intoxicated cyclists form the non-alcohol intoxicant category.",
+          "model_status": "Finland national fatal-road-user investigation reference; decedent-specific role model"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "fallback_model": "FI",
+      "sources": [
+        {
+          "title": "Päihdeonnettomuudet vuosina 2015–2024",
+          "authors": "Onnettomuustietoinstituutti (OTI)",
+          "year": 2026,
+          "url": "https://www.lvk.fi/api/v2/document/628668/B20695E1B6A739A4910A9899E901F70CF5044D7D6E20E36ED5EAF4BB5570AE52",
+          "use": "Finnish fatal-road-crash driver impairment and deceased pedestrian/cyclist intoxication reference counts"
+        },
+        {
+          "title": "11b2 -- Accidental and violent deaths by underlying cause of death (short list of external causes), age and sex, intoxicated separately, 1998-2024",
+          "authors": "Statistics Finland",
+          "year": "1998-2024",
+          "url": "https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/11b2.px",
+          "use": "Confirms death-certificate contributing-cause alcohol/drug intoxication is available by external cause, age, sex and year; exact cross-tab cells are not bundled in this model yet"
+        }
+      ]
+    },
+    "FI_TRAFFIC_PEDESTRIAN_INTOXICATION": {
+      "heading": "CRASH CONTEXT",
+      "compact_row": "IMPAIRMENT",
+      "scope": "Deceased road user: intoxication status of the pedestrian who died.",
+      "semantic": "decedent_intoxication",
+      "categories": {
+        "alcohol_involved": "Alcohol involved",
+        "other_intoxicant": "Other intoxicant(s), no alcohol recorded",
+        "no_intoxication": "No intoxication recorded",
+        "status_unknown": "Intoxication status unavailable"
+      },
+      "models": {
+        "FI": {
+          "label": "Finland | OTI deceased pedestrians 2015-2024",
+          "distribution": {
+            "alcohol_involved": 0.18055555555555555,
+            "other_intoxicant": 0.041666666666666664,
+            "no_intoxication": 0.6481481481481481,
+            "status_unknown": 0.12962962962962962
+          },
+          "provenance": "OTI review of 216 pedestrians killed in Finnish road traffic in 2015-2024: 48 were intoxicated; 39 of the intoxicated pedestrians had alcohol involved. The report figure/table implies 140 clear and 28 with intoxication status unavailable; the remaining 9 intoxicated pedestrians form the non-alcohol intoxicant category.",
+          "model_status": "Finland national fatal-road-user investigation reference; decedent-specific role model"
+        }
+      },
+      "country_model_map": {
+        "FI": "FI"
+      },
+      "fallback_model": "FI",
+      "sources": [
+        {
+          "title": "Päihdeonnettomuudet vuosina 2015–2024",
+          "authors": "Onnettomuustietoinstituutti (OTI)",
+          "year": 2026,
+          "url": "https://www.lvk.fi/api/v2/document/628668/B20695E1B6A739A4910A9899E901F70CF5044D7D6E20E36ED5EAF4BB5570AE52",
+          "use": "Finnish fatal-road-crash driver impairment and deceased pedestrian/cyclist intoxication reference counts"
+        },
+        {
+          "title": "11b2 -- Accidental and violent deaths by underlying cause of death (short list of external causes), age and sex, intoxicated separately, 1998-2024",
+          "authors": "Statistics Finland",
+          "year": "1998-2024",
+          "url": "https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/11b2.px",
+          "use": "Confirms death-certificate contributing-cause alcohol/drug intoxication is available by external cause, age, sex and year; exact cross-tab cells are not bundled in this model yet"
+        }
+      ]
+    },
+    "CA_FATAL_COLLISION_IMPAIRMENT": {
+      "heading": "CRASH CONTEXT",
+      "compact_row": "IMPAIRMENT",
+      "scope": "Crash-level contributing factor; does not establish that the simulated decedent was the impaired road user or driver.",
+      "semantic": "crash_level_contributing_factor",
+      "categories": {
+        "impairment_reported": "Impairment / under the influence reported as a contributing factor",
+        "not_selected": "Impairment not selected in the reference roll"
+      },
+      "models": {
+        "CA": {
+          "label": "Canada | fatal-collision contributing factors | 2022",
+          "distribution": {
+            "impairment_reported": 0.23,
+            "not_selected": 0.77
+          },
+          "provenance": "Transport Canada, Canadian Motor Vehicle Traffic Collision Statistics 2022: impaired / under the influence was reported as a contributing factor in 23.0% of fatal collisions in 2022. Contributing factors can overlap, and the published estimates use submissions from a subset of provinces and territories. Absence from this roll is therefore not a claim that every involved person was sober.",
+          "model_status": "Canada national subset-estimated fatal-collision contributing-factor reference; crash-level"
+        }
+      },
+      "country_model_map": {
+        "CA": "CA"
+      },
+      "fallback_model": "CA",
+      "sources": [
+        {
+          "title": "Canadian Motor Vehicle Traffic Collision Statistics: 2022",
+          "authors": "Transport Canada",
+          "year": 2022,
+          "url": "https://tc.canada.ca/en/road-transportation/statistics-data/canadian-motor-vehicle-traffic-collision-statistics/2022/canadian-motor-vehicle-traffic-collision-statistics-2022",
+          "use": "Canada fatal-collision contributing-factor prevalence for impaired / under the influence"
+        }
+      ]
     }
   }
 }
