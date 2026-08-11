@@ -103,6 +103,7 @@ Key references:
 - Homicide, Finland: European Homicide Monitor 2003–2006 tables provide sex-specific known-event-location counts (350 male victims, 136 female victims). Unknown location is excluded from the conditional known-place roll. No Canada homicide PLACE fallback is bundled yet; Canadian homicide therefore prints no PLACE rather than borrowing Finnish scene patterns.
 - Road traffic, Finland: European Commission/CARE 2020 fatality setting weights are rural road 68%, urban road 28%, motorway 4%. A broad `V01–V99` transport parent is intentionally insufficient to trigger this model; a resolved road/land-transport detail is required so water/air transport cannot acquire a fake road setting.
 - Road traffic, Canada: Transport Canada 2023 fatal-collision counts are urban 799, rural 932, not stated 37 (1,768 total), normalized directly.
+- Railway/nontraffic transport coherence (v0.13.8): when an exact ICD transport detail identifies a collision with a railway train/vehicle, PLACE is resolved from the ICD traffic-status wording rather than from the generic road-setting distribution: nontraffic → `Railway tracks / premises`; traffic → `Railway crossing / public road`; unspecified → `Railway tracks / crossing`. Exact nontraffic transport details with no defensible specific setting are not forced into rural/urban/motorway categories. Railway collisions and explicit nontraffic V-codes do not receive the generic road impairment context because the bundled OTI/Transport Canada impairment models use road/fatal-motor-vehicle denominators, not rail-occurrence denominators.
 - Cancer terminal place, Finland: Ahtiluoto et al.'s nationwide 2019 register cohort reports hospital 82.1%, home 11.0%, long-term-care facility 6.8%; rounding is normalized within the model.
 - Cancer terminal place, Canada: CIHI/Canadian Partnership Against Cancer reporting for Statistics Canada 2005–2009 gives approximately 70% hospital and 11% home. The remaining 19% is retained explicitly as `other / unspecified`; it is a derived residual, not an observed subcategory split.
 - Neurodegenerative terminal place, Finland: the same nationwide register framework gives hospital 43.2%, home 7.0%, long-term care 49.7% for the documented neurodegenerative grouping. No Canadian fallback is used.
@@ -136,3 +137,13 @@ Primary references:
 - Statistics Finland. StatFin **11be — Deaths by underlying cause of death (ICD-10, 3-character level), age and sex**. https://pxdata.stat.fi/PXWeb/pxweb/en/StatFin/StatFin__ksyyt/11be.px
 - Kanta Code Service / Finnish ICD-10 (THL-maintained classification), F10-F19 substance-use disorders and Finnish fifth-character refinements. https://koodistopalvelu.kanta.fi/codeserver/
 - WHO ICD-10 browser, 2019. https://icd.who.int/browse10/2019/en
+### Cause-note annotation model
+
+- `datasets/cause_notes/cause_note_model_v1.json` is a sparse deterministic annotation table, not a probability model. Rules can match exact ICD codes or ranges and may be restricted by country/source. A matching note is added only after cause/detail resolution and consumes no RNG.
+- The initial `M17` rule applies to Finnish StatFin 11be gonarthrosis detail. Statistics Finland 11be reports the **underlying cause of death** at ICD-10 3-character level; it does not expose the individual medical certificate's complete immediate/intervening cause sequence. The note therefore states that the immediate fatal mechanism or intervening complication is unavailable rather than inventing a pulmonary embolism, infection, operation complication, fall, or other plausible pathway.
+- Design rule: unusual source data are retained. Notes explain what the published field means; they must not replace, suppress, reinterpret, or increase the certainty of the recorded cause. Additional rules can be added to this table as similarly non-obvious underlying-cause codes are encountered and verified.
+
+Key references:
+
+- Statistics Finland. *11be -- Deaths by underlying cause of death (ICD-10, 3-character level), age and sex, 1998-2024.* https://statfin.stat.fi/PxWeb/pxweb/en/StatFin/StatFin__ksyyt/statfin_ksyyt_pxt_11be.px/
+- World Health Organization. *Cause of death* — underlying cause is the disease/injury initiating the train of morbid events leading directly to death. https://www.who.int/standards/classifications/classification-of-diseases/cause-of-death

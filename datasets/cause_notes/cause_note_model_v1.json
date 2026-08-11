@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "model_id": "cause-note-model-v1",
+  "description": "Sparse deterministic explanatory notes for resolved underlying causes whose immediate fatal chain may not be obvious from public mortality tables. Notes never alter statistical rolls.",
+  "notes": [
+    {
+      "id": "M17_UNDERLYING_CAUSE_CHAIN_NOT_SHOWN",
+      "countries": ["FI"],
+      "trigger": {
+        "icd_exact": ["M17"],
+        "source_contains": ["Statistics Finland 11be"]
+      },
+      "text": "Recorded as the underlying cause of death; the immediate fatal mechanism or intervening complication is not available in this dataset.",
+      "provenance": "Statistics Finland 11be tabulates the underlying cause of death at ICD-10 3-character level. The public table does not provide the complete medical-certificate sequence of immediate and antecedent causes for the individual death."
+    }
+  ]
+}

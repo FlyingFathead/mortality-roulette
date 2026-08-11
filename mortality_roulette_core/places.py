@@ -128,6 +128,60 @@ def cause_stack_matches_trigger(
     return _outcome_matches_trigger(cause, trigger)
 
 
+def _outcome_is_explicit_nontraffic_transport(outcome: dict[str, Any] | None) -> bool:
+    """True only when a realized V-code explicitly says the event was nontraffic."""
+    if not isinstance(outcome, dict) or not outcome.get("available", True):
+        return False
+    codes = _specific_icd_codes(outcome)
+    if not any(code.startswith("V") for code in codes):
+        return False
+    text = _outcome_text(outcome).casefold()
+    if "unspecified whether traffic or nontraffic accident" in text:
+        return False
+    return "nontraffic accident" in text
+
+
+def _cause_stack_explicit_nontraffic_transport(
+    cause: dict[str, Any] | None,
+    detail: dict[str, Any] | None,
+    deep: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the most-specific realized outcome that explicitly says nontraffic."""
+    for outcome in (deep, detail, cause):
+        if _outcome_is_explicit_nontraffic_transport(outcome):
+            return outcome
+    return None
+
+
+def _is_railway_collision(outcome: dict[str, Any] | None) -> bool:
+    text = _outcome_text(outcome).casefold()
+    return "railway train" in text or "railway vehicle" in text
+
+
+def _cause_stack_railway_collision(
+    cause: dict[str, Any] | None,
+    detail: dict[str, Any] | None,
+    deep: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    for outcome in (deep, detail, cause):
+        if not isinstance(outcome, dict) or not outcome.get("available", True):
+            continue
+        if _specific_icd_codes(outcome) and _is_railway_collision(outcome):
+            return outcome
+    return None
+
+
+def _railway_place_label(outcome: dict[str, Any]) -> tuple[str, str]:
+    text = _outcome_text(outcome).casefold()
+    if "unspecified whether traffic or nontraffic accident" in text:
+        return "railway_tracks_crossing", "Railway tracks / crossing"
+    if "nontraffic accident" in text:
+        return "railway_tracks_premises", "Railway tracks / premises"
+    if "traffic accident" in text:
+        return "railway_crossing_public_road", "Railway crossing / public road"
+    return "railway_setting_unspecified", "Railway tracks / crossing"
+
+
 class PlaceModel:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
@@ -286,7 +340,43 @@ class PlaceModel:
         detail: dict[str, Any] | None = None,
         deep: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        nontraffic = _cause_stack_explicit_nontraffic_transport(cause, detail, deep)
+        railway = _cause_stack_railway_collision(cause, detail, deep)
+        if railway is not None:
+            requested = self._country_key(country)
+            category, label = _railway_place_label(railway)
+            return {
+                "available": True,
+                "context_id": "ICD_RAILWAY_EVENT_PLACE",
+                "semantic": "event_setting",
+                "heading": "PLACE",
+                "category": category,
+                "label": label,
+                "roll": None,
+                "conditional_probability": 1.0,
+                "requested_country": requested,
+                "model_country": requested,
+                "model_label": "ICD-10 resolved railway setting",
+                "profile": None,
+                "fallback": False,
+                "provenance": (
+                    "The realized ICD-10 transport detail explicitly identifies a collision "
+                    "with a railway train/vehicle. Traffic-status wording in that detail "
+                    "resolves the railway setting; the generic rural/urban/motorway PLACE "
+                    "distribution is therefore not used."
+                ),
+                "model_status": "ICD-resolved event setting",
+                "source_period": "ICD-10",
+                "constrained": True,
+                "model_id": str(self.payload.get("model_id", "cause-place")),
+            }
+
         for context_id in self.precedence:
+            # An exact nontraffic V-code is not a public-road fatality. If ICD
+            # gives no more specific event setting, omit ROAD PLACE rather than
+            # forcing rural/urban/motorway probabilities onto an incompatible event.
+            if context_id == "ROAD_TRAFFIC_EVENT_PLACE" and nontraffic is not None:
+                continue
             context = self.contexts.get(context_id, {})
             if not cause_stack_matches_trigger(dict(context.get("trigger", {})), cause=cause, detail=detail, deep=deep):
                 continue

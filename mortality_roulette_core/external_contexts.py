@@ -109,6 +109,51 @@ def cause_stack_road_user_role(
     return None
 
 
+def _outcome_is_explicit_nontraffic_transport(outcome: dict[str, Any] | None) -> bool:
+    """Return True only for a realized V-code explicitly labelled nontraffic."""
+    if not isinstance(outcome, dict) or not outcome.get("available", True):
+        return False
+    code = str(outcome.get("code", "")).strip()
+    specific_v = bool(code and _norm_icd(code).startswith("V"))
+    if not specific_v:
+        # Older/synthetic detail objects may preserve the exact V-code only in label.
+        for token in _ICD_TOKEN_RE.findall(_ICD_RANGE_RE.sub(" ", str(outcome.get("label", "")))):
+            if _norm_icd(token).startswith("V"):
+                specific_v = True
+                break
+    if not specific_v:
+        return False
+    text = str(outcome.get("label", "")).casefold()
+    if "unspecified whether traffic or nontraffic accident" in text:
+        return False
+    return "nontraffic accident" in text
+
+
+def cause_stack_is_explicit_nontraffic_transport(
+    cause: dict[str, Any] | None = None,
+    detail: dict[str, Any] | None = None,
+    deep: dict[str, Any] | None = None,
+) -> bool:
+    return any(_outcome_is_explicit_nontraffic_transport(outcome) for outcome in (deep, detail, cause))
+
+
+def _outcome_is_railway_collision(outcome: dict[str, Any] | None) -> bool:
+    if not isinstance(outcome, dict) or not outcome.get("available", True):
+        return False
+    text = str(outcome.get("label", "")).casefold()
+    return ("railway train" in text or "railway vehicle" in text) and bool(
+        str(outcome.get("code", "")).strip() or _ICD_TOKEN_RE.search(_ICD_RANGE_RE.sub(" ", text))
+    )
+
+
+def cause_stack_is_railway_collision(
+    cause: dict[str, Any] | None = None,
+    detail: dict[str, Any] | None = None,
+    deep: dict[str, Any] | None = None,
+) -> bool:
+    return any(_outcome_is_railway_collision(outcome) for outcome in (deep, detail, cause))
+
+
 class ExternalContextModel:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
@@ -262,6 +307,15 @@ class ExternalContextModel:
         ``age`` and ``sex`` are carried into output for future finer cells but are
         not used to manufacture unsupported joint probabilities.
         """
+        # The bundled impairment models describe road-traffic deaths/fatal
+        # motor-vehicle collisions. Railway-train/vehicle collisions have a
+        # different event denominator and receive no generic road impairment
+        # roll; exact nontraffic V-codes are likewise outside the model.
+        if cause_stack_is_railway_collision(cause, detail, deep):
+            return None
+        if cause_stack_is_explicit_nontraffic_transport(cause, detail, deep):
+            return None
+
         role = cause_stack_road_user_role(cause, detail, deep)
         if role is None:
             return None

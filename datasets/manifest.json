@@ -139,6 +139,17 @@
       "attribution": "See datasets/README.md and the embedded sources arrays in the JSON.",
       "sha256": "5764e087e84a514e7a1c747578b2d46616fed021c17800370b6f3ef72458b36a",
       "bytes": 27199
+    },
+    {
+      "path": "datasets/cause_notes/cause_note_model_v1.json",
+      "agency": "Mortality Roulette explanatory annotation model",
+      "source": "Cause-note annotation model v1",
+      "reference": "Statistics Finland 11be; WHO underlying-cause semantics",
+      "url": "datasets/README.md",
+      "license": "Project-authored explanatory metadata; source classifications/data retain their respective rights",
+      "attribution": "See datasets/README.md and the provenance fields in the JSON.",
+      "sha256": "8c81ae5a5dd67504161d8d1c132754e434823106c04c67e77cfd4a280223d102",
+      "bytes": 885
     }
   ]
 }

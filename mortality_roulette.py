@@ -97,6 +97,7 @@ from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 
+from mortality_roulette_core.cause_notes import CauseNoteModel
 from mortality_roulette_core.external_contexts import ExternalContextModel
 from mortality_roulette_core.places import PlaceModel
 from mortality_roulette_core.suicide_reasons import SuicideReasonModel
@@ -110,7 +111,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.7"
+VERSION = "0.13.8"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -127,9 +128,11 @@ BUNDLED_WHO_ICD_TITLES = DATASETS_ROOT / "who" / "icd10" / "who_icd10_titles_201
 BUNDLED_SUICIDE_REASON_MODEL = DATASETS_ROOT / "suicide" / "suicide_reason_model_v1.json"
 BUNDLED_EXTERNAL_CONTEXT_MODEL = DATASETS_ROOT / "external_causes" / "conditional_context_model_v1.json"
 BUNDLED_PLACE_MODEL = DATASETS_ROOT / "places" / "cause_place_model_v1.json"
+BUNDLED_CAUSE_NOTE_MODEL = DATASETS_ROOT / "cause_notes" / "cause_note_model_v1.json"
 SUICIDE_REASON_MODEL = SuicideReasonModel.from_path(BUNDLED_SUICIDE_REASON_MODEL)
 EXTERNAL_CONTEXT_MODEL = ExternalContextModel.from_path(BUNDLED_EXTERNAL_CONTEXT_MODEL)
 PLACE_MODEL = PlaceModel.from_path(BUNDLED_PLACE_MODEL)
+CAUSE_NOTE_MODEL = CauseNoteModel.from_path(BUNDLED_CAUSE_NOTE_MODEL)
 
 MALE_BIRTH_SHARE = 0.512
 TAIL_CAP = 0.50
@@ -6471,6 +6474,14 @@ def print_cause_detail(
         print_icd_subtype_context(detail)
 
 
+def print_cause_note(outcome: dict[str, object] | None) -> None:
+    """Print a deterministic explanatory note for a resolved underlying cause."""
+    if not isinstance(outcome, dict) or not outcome.get("available"):
+        return
+    text = str(outcome.get("text", "")).strip()
+    if text:
+        print(f"note: {text}")
+
 
 # ---------------------------------------------------------------------------
 # v0.11 seasonal death timing
@@ -8045,6 +8056,15 @@ def simulate(
                     rng=deep_detail_rng,
                 )
 
+            cause_note_outcome = None
+            if died:
+                cause_note_outcome = CAUSE_NOTE_MODEL.note_for_cause_stack(
+                    country=ACTIVE_COUNTRY,
+                    cause=cause_outcome,
+                    detail=detail_outcome,
+                    deep=deep_detail_outcome,
+                )
+
             suicide_reason_outcome = None
             if died and suicide_reason_rng is not None:
                 suicide_reason_outcome = SUICIDE_REASON_MODEL.roll_for_cause_stack(
@@ -8356,6 +8376,8 @@ def simulate(
                             tree=(cause_detail_mode == "tree"),
                             deep_detail=deep_detail_outcome,
                         )
+                    if cause_note_outcome is not None:
+                        print_cause_note(cause_note_outcome)
                     if place_outcome is not None:
                         print_place_context(place_outcome)
                     if suicide_reason_outcome is not None:
@@ -9280,6 +9302,7 @@ def _deathmatch_roll_cause_stack(
     cause_outcome = None
     detail_outcome = None
     deep_outcome = None
+    cause_note_outcome = None
     suicide_reason_outcome = None
     x80_location_outcome = None
     x41_drug_class_outcome = None
@@ -9324,6 +9347,13 @@ def _deathmatch_roll_cause_stack(
             sex=sex,
             rng=ctx["deep_rng"],
         )
+
+    cause_note_outcome = CAUSE_NOTE_MODEL.note_for_cause_stack(
+        country=str(ctx.get("country", "")),
+        cause=cause_outcome,
+        detail=detail_outcome,
+        deep=deep_outcome,
+    )
 
     suicide_reason_outcome = SUICIDE_REASON_MODEL.roll_for_cause_stack(
         country=str(ctx.get("country", "")),
@@ -9396,6 +9426,7 @@ def _deathmatch_roll_cause_stack(
         "cause": cause_outcome,
         "detail": detail_outcome,
         "deep": deep_outcome,
+        "cause_note": cause_note_outcome,
         "suicide_reason": suicide_reason_outcome,
         "x80_location": x80_location_outcome,
         "place": place_outcome,
@@ -9490,6 +9521,7 @@ def _print_deathmatch_final_card(
     cause_outcome = stack.get("cause")
     detail_outcome = stack.get("detail")
     deep_outcome = stack.get("deep")
+    cause_note_outcome = stack.get("cause_note")
     suicide_reason_outcome = stack.get("suicide_reason")
     x80_location_outcome = stack.get("x80_location")
     place_outcome = stack.get("place") or _as_place_outcome(x80_location_outcome, x80=True)
@@ -9507,6 +9539,8 @@ def _print_deathmatch_final_card(
                 tree=(cause_detail_mode == "tree"),
                 deep_detail=deep_outcome,
             )
+        if cause_note_outcome is not None:
+            print_cause_note(cause_note_outcome)
         if place_outcome is not None:
             print_place_context(place_outcome)
         if suicide_reason_outcome is not None:
@@ -9571,6 +9605,7 @@ def _deathmatch_compact_stats(
     cause = stack.get("cause") if isinstance(stack, dict) else None
     detail = stack.get("detail") if isinstance(stack, dict) else None
     deep = stack.get("deep") if isinstance(stack, dict) else None
+    cause_note = stack.get("cause_note") if isinstance(stack, dict) else None
     suicide_reason = stack.get("suicide_reason") if isinstance(stack, dict) else None
     x80_location = stack.get("x80_location") if isinstance(stack, dict) else None
     place = stack.get("place") if isinstance(stack, dict) else None
@@ -9608,6 +9643,10 @@ def _deathmatch_compact_stats(
     elif isinstance(detail, dict) and detail.get("available"):
         detail_text = str(detail.get("label", detail_text))
     rows.append(("DETAIL", detail_text))
+    if isinstance(cause_note, dict) and cause_note.get("available"):
+        note_text = str(cause_note.get("text", "")).strip()
+        if note_text:
+            rows.append(("NOTE", note_text))
 
     if isinstance(place, dict) and place.get("available"):
         rows.append(("📍 PLACE", str(place.get("label", "unresolved"))))

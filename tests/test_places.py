@@ -192,6 +192,61 @@ class PlaceModelTests(unittest.TestCase):
         )
         self.assertIsNone(rolled)
 
+    def test_railway_nontraffic_place_is_icd_resolved_not_generic_road(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", rng=random.Random(4),
+            detail={
+                "available": True,
+                "code": "V05.0",
+                "label": "V05.0 Pedestrian injured in collision with railway train or railway vehicle : nontraffic accident",
+            },
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["context_id"], "ICD_RAILWAY_EVENT_PLACE")
+        self.assertEqual(rolled["label"], "Railway tracks / premises")
+        self.assertIsNone(rolled["roll"])
+        self.assertEqual(rolled["conditional_probability"], 1.0)
+        self.assertNotIn("fatal collision setting", rolled["model_label"].casefold())
+
+    def test_railway_traffic_place_resolves_to_crossing_public_road(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", rng=random.Random(4),
+            detail={
+                "available": True,
+                "code": "V05.1",
+                "label": "V05.1 Pedestrian injured in collision with railway train or railway vehicle : traffic accident",
+            },
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["label"], "Railway crossing / public road")
+        self.assertIsNone(rolled["roll"])
+
+    def test_unspecified_railway_traffic_status_stays_unspecified(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", rng=random.Random(4),
+            detail={
+                "available": True,
+                "code": "V05.9",
+                "label": "V05.9 Pedestrian injured in collision with railway train or railway vehicle : unspecified whether traffic or nontraffic accident",
+            },
+        )
+        self.assertIsNotNone(rolled)
+        assert rolled is not None
+        self.assertEqual(rolled["label"], "Railway tracks / crossing")
+
+    def test_nontraffic_transport_without_specific_setting_is_not_forced_onto_road(self) -> None:
+        rolled = mr.PLACE_MODEL.roll_for_cause_stack(
+            country="ca", sex="male", rng=random.Random(4),
+            detail={
+                "available": True,
+                "code": "V09.0",
+                "label": "V09.0 Pedestrian injured in unspecified nontraffic accident",
+            },
+        )
+        self.assertIsNone(rolled)
+
     def test_specific_road_traffic_code_rolls_country_native_setting(self) -> None:
         fi = mr.PLACE_MODEL.roll_for_cause_stack(
             country="fi", sex="male", rng=random.Random(4),

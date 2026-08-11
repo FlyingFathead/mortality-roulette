@@ -220,6 +220,35 @@ class ExternalContextModelTests(unittest.TestCase):
         self.assertAlmostEqual(resolved["distribution"]["alcohol_involved"], 30 / 160)
         self.assertAlmostEqual(resolved["distribution"]["status_unknown"], 17 / 160)
 
+    def test_railway_collision_does_not_get_generic_road_impairment_context(self) -> None:
+        for code, label in (
+            (
+                "V05.0",
+                "V05.0 Pedestrian injured in collision with railway train or railway vehicle : nontraffic accident",
+            ),
+            (
+                "V05.1",
+                "V05.1 Pedestrian injured in collision with railway train or railway vehicle : traffic accident",
+            ),
+        ):
+            with self.subTest(code=code):
+                outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+                    country="ca", sex="male", age=102, rng=random.Random(1),
+                    detail={"available": True, "code": code, "label": label},
+                )
+                self.assertIsNone(outcome)
+
+    def test_nontraffic_transport_does_not_get_generic_road_impairment_context(self) -> None:
+        outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
+            country="ca", sex="male", age=40, rng=random.Random(1),
+            detail={
+                "available": True,
+                "code": "V09.0",
+                "label": "V09.0 Pedestrian injured in unspecified nontraffic accident",
+            },
+        )
+        self.assertIsNone(outcome)
+
     def test_canada_road_death_uses_fatal_collision_contributing_factor_reference(self) -> None:
         outcome = mr.EXTERNAL_CONTEXT_MODEL.roll_traffic_context_for_cause_stack(
             country="ca", sex="male", age=35, rng=random.Random(1),

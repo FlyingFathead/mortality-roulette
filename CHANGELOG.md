@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.8
+
+- Added a sparse, data-driven cause-note layer (`datasets/cause_notes/cause_note_model_v1.json`) for deterministic explanatory annotations that do not alter any mortality or context roll. The first rule covers Finnish `M17` gonarthrosis detail from StatFin 11be and clarifies that the public underlying-cause table does not expose the immediate fatal mechanism or intervening complication.
+- Fixed railway-collision PLACE coherence. Exact ICD transport detail involving a railway train/vehicle now resolves from ICD semantics instead of the generic rural/urban/motorway road model: explicit nontraffic events use `Railway tracks / premises`, explicit traffic events use `Railway crossing / public road`, and unspecified traffic status uses `Railway tracks / crossing`.
+- Suppressed the generic road-collision impairment context for railway collisions and for exact transport details explicitly marked nontraffic. These events are outside the denominator of the bundled road/fatal-motor-vehicle impairment models; no rail-specific intoxication statistic is invented.
+- Added regression coverage for cause-note matching, range-endpoint rejection, railway/nontraffic PLACE resolution, railway impairment suppression, and compact `NOTE` placement.
+
 ## v0.13.7
 
 - Normalized Deathmatch contestant labels to put player identity first: `PLAYER 1: 🇨🇦 CANADA (ONTARIO)` instead of `🇨🇦 CANADA (ONTARIO) (PLAYER 1)`.
