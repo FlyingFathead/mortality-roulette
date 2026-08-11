@@ -127,6 +127,24 @@ The original baked mortality schedule from early versions is retained in the cod
 
 Present-day model selection does not remove any existing data plumbing: bundled datasets are preferred for normal offline use, while explicit cache paths and `--refresh-statfin`, `--refresh-statcan` and the other refresh/download options remain available.
 
+### Historical birth cohorts (optional HMD)
+
+`--birth-year YEAR` can follow the mortality conditions that applied as a simulated person aged through calendar time rather than applying one modern period table to the whole life. For a person born in 1947, age 0 uses 1947 qx, age 1 uses 1948 qx, and so on.
+
+Mortality Roulette can read **Human Mortality Database (HMD)** 1x1 period life tables directly from locally downloaded country ZIPs. HMD is optional: the normal present-day game does not need it. For **national historical birth-cohort runs**, an installed HMD archive is preferred automatically for its long historical coverage. If a bundled canonical national source contains a newer observed year than the installed HMD archive, Mortality Roulette appends that newer observed year rather than discarding it or silently treating an older HMD year as current. If HMD is not installed, Canada falls back to its bundled Statistics Canada history and Finland can use the open Statistics Finland 12ap history (cached/downloaded on demand for pre-2024 cohort years). Province-specific Canadian runs continue to use province-specific Statistics Canada mortality rather than substituting national HMD data.
+
+After registering/logging in at the HMD website, download the desired country archive and place it under the Git-ignored local data directory:
+
+```text
+local-data/hmd/FIN.zip
+local-data/hmd/CAN.zip
+local-data/hmd/USA.zip   # parser-ready for future U.S. geography support
+```
+
+The program reads only the HMD-created `STATS/*ltper_1x1.txt` period life tables required for qx. It does **not** consume HMD `InputDB` material. Complete HMD country downloads are deliberately not bundled in Mortality Roulette releases; users obtain their own current copy from HMD. `local-data/` is optional and is not created merely by launching the base program. When HMD is actually used, the historical run/printout identifies the HMD country source page; there is no HMD nag in ordinary present-day startup.
+
+`--hmd-dir PATH` can override the default location and accepts a directory containing country ZIPs, an extracted HMD country tree, or a direct country ZIP path for a single-country run.
+
 Deathmatch is population-baseline/no-alcohol by default. Add `--boozehound` or `--boozehound-wino` explicitly to apply alcohol exposure.
 
 ---
@@ -174,7 +192,7 @@ Canadian provincial mode currently uses:
 
 ### Deathmatch
 
-The preferred scalable contestant syntax is repeatable `--player`. Each player carries its own country, optional Canadian province, and sex:
+The preferred scalable contestant syntax is repeatable `--player`. Each player carries its own country, optional Canadian province, sex, and optional birth year:
 
 ```bash
 python mortality_roulette.py --player ca:on:m --player fi:f
@@ -186,12 +204,34 @@ Compact player format:
 fi:m          Finland, male
 fi:f          Finland, female
 fi:r          Finland, random sex
+fi:m:1947     Finland, male, born 1947
 ca:m          national Canada, male
+ca:m:1980     national Canada, male, born 1980
 ca:on:m       Ontario, male
+ca:on:f:1962  Ontario, female, born 1962
 ca:bc:f       British Columbia, female
 ```
 
 `--player` must currently be supplied exactly twice. `:r` is resolved independently for each player using its own deterministic RNG stream when `--seed` is supplied. Province and sex are part of the player spec, so `--ca-province` and `--sex/--gender` are intentionally rejected when `--player` is used. This compact contestant object is the foundation for adding further per-player exposures later without proliferating parallel `--foo-1` / `--foo-2` switches.
+
+Birth years can be embedded per player or supplied as a match-level convenience override:
+
+```bash
+# Per-player years
+python mortality_roulette.py --player fi:m:1979 --player fi:f:1985 --mortality-model official
+
+# Override both embedded/player years left-to-right
+python mortality_roulette.py --player fi:m --player fi:f --birth-years 1979 1985 --mortality-model official
+
+# One value applies to both contestants
+python mortality_roulette.py --deathmatch fi ca --sex m --birth-years 1947 --mortality-model official
+```
+
+When **both** birth years are known, Deathmatch defaults to a shared **calendar timeline**. The earlier-born contestant starts first; the later-born column displays `WAITING TO BE BORN...` until its birth year arrives, after which both lives advance through the same calendar years. In this mode the `long` winner is the contestant who dies in the later calendar year (the last one alive), not necessarily the contestant with the greater lifespan in years.
+
+Use `--deathmatch-timeline independent` for the alternative age-for-age comparison. Both players then start at age 0 immediately, but each column advances through its own calendar years (for example age 40 may mean 2019 for a 1979-born player and 2025 for a 1985-born player). `--deathmatch-timeline calendar` forces the shared-world form and requires birth years for both contestants. With no birth years, Deathmatch behaves exactly as the ordinary present-day mode always has.
+
+Historical layers are calendar-gated independently. Annual mortality uses the player's year-specific cohort source. Cause/detail/seasonality data are used only when the death calendar year falls within that source's historical coverage; pre-coverage deaths remain explicitly `N/A`/unavailable rather than borrowing later distributions. Years after the newest observation retain the existing explicitly labelled future-hold behavior. This prevents anachronisms such as assigning a modern cause distribution to a death that occurred before that cause/data classification existed.
 
 Deathmatch presentation identifies the two sides consistently before their geography, for example `PLAYER 1: 🇨🇦 CANADA (ONTARIO)` and `PLAYER 2: 🇫🇮 FINLAND`. The final two-column card now uses explicit semantic subsections when applicable: `🚗 CRASH CONTEXT` for downstream traffic impairment/intoxication context, `💊 SUBSTANCES` for poisoning-agent context, and `🍸 ALCOHOL` for the configured lifetime exposure. Cumulative beverage conversions are labeled `🍷 WINE EQUIV.` and `🥃 VODKA EQUIV.` to make clear that they are descriptive equivalents of the same ethanol total, not additional consumption.
 
@@ -303,7 +343,10 @@ The alcohol calibration harness also reports an **unfitted** cause-hazard Wood c
 --runs 100000
 --batch-engine fast
 --batch-engine step
---birth-year 1980
+--birth-year 1980           # single run; in Deathmatch one shared year for both
+--birth-years 1979 1985     # Deathmatch per-player override; one value = both
+--deathmatch-timeline auto|calendar|independent
+--hmd-dir PATH              # optional local HMD ZIP directory/tree/archive
 ```
 
 Batch summaries include a fixed-bucket terminal death-age histogram by default, with counts and shares. Use `--no-histogram` to suppress it. The histogram is presentation-only and uses the already simulated death ages; all pre-existing batch summary figures and sections remain unchanged.
@@ -408,7 +451,7 @@ Primary statistical/data sources:
 - [Statistics Canada 13-10-0708-01](https://www150.statcan.gc.ca/n1/en/catalogue/1310070801) — deaths by month and place of residence. Bundled Statistics Canada snapshots are redistributed under the Statistics Canada Open Licence with source attribution.
 - [WHO Mortality Database](https://www.who.int/data/data-collection-tools/who-mortality-database) — Canadian civil-registration cause-of-death data and Finnish deep-detail support where available.
 - WHO ICD-10 2019 terminology — code-title presentation metadata. WHO retains copyright/licensing control over ICD-10; this material is not represented as Statistics Finland/Statistics Canada open data.
-- [Human Mortality Database](https://www.mortality.org/) — optional Finnish historical cohort life-table input.
+- [Human Mortality Database (HMD)](https://www.mortality.org/) — optional local historical 1x1 period-life-table input for national birth-cohort simulation. Mortality Roulette supports HMD country ZIP imports without bundling complete HMD downloads. Current country pages: [Finland](https://www.mortality.org/Country/Country?cntr=FIN), [Canada](https://www.mortality.org/Country/Country?cntr=CAN), and parser-ready [United States](https://www.mortality.org/Country/Country?cntr=USA). HMD-created estimates are CC BY 4.0; separately supplied input data retain their providers' distribution licences.
 - Suicide statistical-reason evidence: Finnish nationwide psychological-autopsy studies (Heikkinen and colleagues) plus Canadian coroner/medical-examiner studies from Alberta and Montréal; exact references and model provenance are in `datasets/README.md`.
 - Conditional external-cause context evidence: Toronto/Swiss/Taipei jumping-site studies for `X80`; Finnish poisoning studies plus Public Health Agency of Canada coroner/medical-examiner toxicology data for `X41`; WHO ICD-10 multidrug-poisoning coding semantics plus PHAC accidental acute-toxicity substance-count data for the explicitly labelled Canadian `X44` context reference; OTI fatal-road investigation data for Finnish traffic intoxication/impairment context; and Transport Canada fatal-collision contributing-factor data for the Canadian traffic reference. Exact references and modeling limitations are in `datasets/README.md`.
 

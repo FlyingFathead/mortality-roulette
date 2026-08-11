@@ -8,6 +8,7 @@ import math
 import random
 import sys
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import mortality_roulette as mr
@@ -63,6 +64,110 @@ class CanadianProvinceTests(unittest.TestCase):
         )
         self.assertEqual(source.geography, "British Columbia")
         self.assertEqual(source.data[2024][1], 4155)
+
+
+class HistoricalSourceSelectionTests(unittest.TestCase):
+    def test_hmd_printout_shows_resolved_local_source(self) -> None:
+        source = mr.CohortMortalitySource(
+            name="synthetic HMD Finland",
+            data={"male": {1900: {0: 0.10}}, "female": {}},
+            min_year=1900, max_year=1900, max_exact_age=0,
+            source_url=mr.HMD_COUNTRY_PAGES["FIN"],
+            local_source="/actual/resolved/path/FIN.zip",
+        )
+        out = io.StringIO()
+        with mock.patch.object(
+            mr,
+            "resolve_annual_mortality_q",
+            return_value=(0.10, 0.10, 1.0, None, "synthetic HMD Finland 1900", False, 1900),
+        ), contextlib.redirect_stdout(out):
+            mr.print_mortality_odds_table(
+                sex="male", start_age=0, end_age=0,
+                birth_year=1900, cohort_source=source,
+            )
+        self.assertIn(
+            "HMD local source: /actual/resolved/path/FIN.zip",
+            out.getvalue(),
+        )
+
+    def test_finland_national_prefers_installed_hmd_over_overlapping_statfin(self) -> None:
+        sentinel = mr.CohortMortalitySource(
+            name="synthetic HMD Finland", data={"male": {}, "female": {}},
+            min_year=1878, max_year=2024, max_exact_age=109,
+        )
+        with mock.patch.object(mr, "find_hmd_source", return_value=Path("/tmp/FIN.zip")), \
+             mock.patch.object(mr, "load_hmd_country", return_value=sentinel) as loader, \
+             mock.patch.object(mr, "fetch_statfin_life_table") as statfin:
+            source = mr.prepare_cohort_source(
+                birth_year=2000, start_age=0, selection="m", hmd_dir=None,
+                statfin_cache=mr.BUNDLED_STATFIN_LIFE_TABLE, refresh_statfin=False,
+            )
+        self.assertIs(source, sentinel)
+        loader.assert_called_once()
+        statfin.assert_not_called()
+
+    def test_finland_without_hmd_uses_statfin_historical_source_when_available(self) -> None:
+        statfin = mr.CohortMortalitySource(
+            name="synthetic StatFin history",
+            data={"male": {2000: {0: 0.01}}, "female": {2000: {0: 0.009}}},
+            min_year=1986, max_year=2024, max_exact_age=99,
+        )
+        with mock.patch.object(mr, "find_hmd_source", return_value=None), \
+             mock.patch.object(mr, "fetch_statfin_life_table", return_value=statfin) as loader:
+            source = mr.prepare_cohort_source(
+                birth_year=2000, start_age=0, selection="m", hmd_dir=None,
+                statfin_cache=mr.DEFAULT_STATFIN_CACHE, refresh_statfin=False,
+            )
+        self.assertIs(source, statfin)
+        loader.assert_called_once_with(cache_path=mr.DEFAULT_STATFIN_CACHE, refresh=False)
+
+    def test_finland_inadequate_snapshot_fails_cleanly_before_lookup(self) -> None:
+        snapshot = mr.CohortMortalitySource(
+            name="synthetic 2024 snapshot",
+            data={"male": {2024: {0: 0.002}}, "female": {2024: {0: 0.002}}},
+            min_year=2024, max_year=2024, max_exact_age=99,
+        )
+        with mock.patch.object(mr, "find_hmd_source", return_value=None), \
+             mock.patch.object(mr, "fetch_statfin_life_table", return_value=snapshot):
+            with self.assertRaisesRegex(mr.CohortDataError, "begins in 2000"):
+                mr.prepare_cohort_source(
+                    birth_year=2000, start_age=0, selection="m", hmd_dir=None,
+                    statfin_cache=mr.BUNDLED_STATFIN_LIFE_TABLE, refresh_statfin=False,
+                )
+
+    def test_canada_national_prefers_hmd_history_and_appends_newer_statcan(self) -> None:
+        hmd = mr.CohortMortalitySource(
+            name="synthetic HMD Canada",
+            data={"male": {1921: {0: 0.10}, 2023: {0: 0.010}}, "female": {}},
+            min_year=1921, max_year=2023, max_exact_age=109,
+            source_url=mr.HMD_COUNTRY_PAGES["CAN"],
+            local_source="/tmp/CAN.zip",
+        )
+        statcan = mr.CohortMortalitySource(
+            name="synthetic StatCan",
+            data={"male": {1980: {0: 0.020}, 2024: {0: 0.009}}, "female": {}},
+            min_year=1980, max_year=2024, max_exact_age=109,
+        )
+        with mock.patch.object(mr, "find_hmd_source", return_value=Path("/tmp/CAN.zip")), \
+             mock.patch.object(mr, "load_hmd_country", return_value=hmd) as loader:
+            national = mr.prepare_canada_cohort_source(
+                birth_year=1947, start_age=0, selection="m", hmd_dir=None,
+                statcan_source=statcan, province=None,
+            )
+            provincial = mr.prepare_canada_cohort_source(
+                birth_year=2000, start_age=0, selection="m", hmd_dir=None,
+                statcan_source=statcan, province="bc",
+            )
+        self.assertIsNot(national, hmd)
+        self.assertEqual(national.min_year, 1921)
+        self.assertEqual(national.max_year, 2024)
+        self.assertAlmostEqual(national.data["male"][2023][0], 0.010)
+        self.assertAlmostEqual(national.data["male"][2024][0], 0.009)
+        self.assertEqual(national.source_url, mr.HMD_COUNTRY_PAGES["CAN"])
+        self.assertEqual(national.local_source, "/tmp/CAN.zip")
+        self.assertIn("observed extension 2024–2024", national.name)
+        self.assertIs(provincial, statcan)
+        loader.assert_called_once()
 
 
 class DeathmatchAlcoholEngineAvailabilityTests(unittest.TestCase):
@@ -1261,6 +1366,76 @@ class MortalityModelPromptRegressionTests(unittest.TestCase):
                 prompt.assert_called_once_with(allow_legacy=True)
         finally:
             mr.ACTIVE_COUNTRY = old_country
+
+class DeathmatchHistoricalCalendarTests(unittest.TestCase):
+    def test_cause_stack_receives_actual_death_calendar_year(self) -> None:
+        seen: list[int | None] = []
+
+        class FakeCauseSource:
+            def roll(self, *, sex, age, calendar_year, rng):
+                seen.append(calendar_year)
+                return {
+                    "available": False,
+                    "reason": "cause-of-death data begin in 1969; death occurred in 1963",
+                    "calendar_year": calendar_year,
+                }
+
+        rng = random.Random(1)
+        ctx = {
+            "country": "fi",
+            "cause_source": FakeCauseSource(),
+            "detail_resolver": None,
+            "deep_detail_resolver": None,
+            "seasonal_source": None,
+            "cause_rng": rng,
+            "detail_rng": random.Random(2),
+            "deep_rng": random.Random(3),
+            "suicide_reason_rng": random.Random(4),
+            "x80_location_rng": random.Random(5),
+            "x41_drug_class_rng": random.Random(6),
+            "x44_substance_context_rng": random.Random(7),
+            "traffic_context_rng": random.Random(8),
+            "place_rng": random.Random(9),
+            "seasonal_rng": random.Random(10),
+        }
+        outcome = mr._deathmatch_roll_cause_stack(
+            ctx, sex="male", age=16, cause_detail_mode="broad", calendar_year=1963
+        )
+        self.assertEqual(seen, [1963])
+        self.assertFalse(outcome["cause"]["available"])
+        self.assertEqual(outcome["cause"]["calendar_year"], 1963)
+
+    def test_calendar_win_reason_is_last_alive_not_lived_longer(self) -> None:
+        self.assertEqual(mr._deathmatch_win_reason("long", "calendar"), "last alive")
+        self.assertEqual(mr._deathmatch_win_reason("short", "calendar"), "died first")
+
+    def test_compact_card_includes_death_calendar_year(self) -> None:
+        ctx = {"country": "fi", "province": None, "birth_year": 1947, "cause_source": None}
+        state = {
+            "death_age": 83,
+            "death_year": 2030,
+            "q": 0.05,
+            "roll": 0.01,
+            "cause_stack": {},
+        }
+        rows = dict(mr._deathmatch_compact_stats(ctx, state, sex="male", start_age=0))
+        self.assertEqual(rows["BIRTH YEAR"], "1947")
+        self.assertEqual(rows["DEATH YEAR"], "2030")
+
+    def test_calendar_cell_source_suffix_is_split_for_second_row(self) -> None:
+        main, source = mr._split_deathmatch_source_suffix(
+            "q 0.7950% | roll 11.8349% | ✓ [HMD Finland 1x1 period life table 1979]"
+        )
+        self.assertEqual(main, "q 0.7950% | roll 11.8349% | ✓")
+        self.assertEqual(source, "HMD Finland 1x1 period life table 1979")
+
+    def test_calendar_cell_source_split_preserves_alcohol_bracket(self) -> None:
+        main, source = mr._split_deathmatch_source_suffix(
+            "q 1.0000% [0.8000×1.250] | roll 50.0000% | ✓ "
+            "[future hold: 2024 HMD Finland 1x1 period life table]"
+        )
+        self.assertIn("[0.8000×1.250]", main)
+        self.assertEqual(source, "future hold: 2024 HMD Finland 1x1 period life table")
 
 
 if __name__ == "__main__":

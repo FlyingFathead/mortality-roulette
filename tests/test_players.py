@@ -29,6 +29,14 @@ class PlayerSpecTests(unittest.TestCase):
         spec = mr.parse_player_spec("finland:random")
         self.assertEqual((spec.country, spec.province, spec.sex_selection), ("fi", None, "r"))
 
+    def test_player_specs_accept_optional_birth_year(self) -> None:
+        fin = mr.parse_player_spec("fi:m:1947")
+        self.assertEqual((fin.country, fin.province, fin.sex_selection, fin.birth_year), ("fi", None, "m", 1947))
+        can_prov = mr.parse_player_spec("ca:on:f:1962")
+        self.assertEqual((can_prov.country, can_prov.province, can_prov.sex_selection, can_prov.birth_year), ("ca", "on", "f", 1962))
+        can_nat = mr.parse_player_spec("ca:m:1980")
+        self.assertEqual((can_nat.country, can_nat.province, can_nat.sex_selection, can_nat.birth_year), ("ca", None, "m", 1980))
+
     def test_finland_rejects_province_field(self) -> None:
         with self.assertRaisesRegex(ValueError, "must not include a province"):
             mr.parse_player_spec("fi:on:m")
@@ -127,6 +135,53 @@ class PlayerSpecTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("--sex/--gender cannot be combined with --player", result.stderr)
+
+    def test_birth_years_override_player_years_and_auto_select_calendar(self) -> None:
+        argv = [
+            "mortality_roulette.py",
+            "--player", "fi:m:1947",
+            "--player", "fi:f:1962",
+            "--birth-years", "1979", "1985",
+            "--mortality-model", "official",
+        ]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(mr, "run_deathmatch", return_value=73) as runner, \
+             mock.patch("builtins.print"):
+            rc = mr.main()
+        self.assertEqual(rc, 73)
+        parsed = runner.call_args.args[0]
+        self.assertEqual(parsed.deathmatch_birth_years, [1979, 1985])
+        self.assertEqual(parsed.deathmatch_timeline_resolved, "calendar")
+
+    def test_mixed_birth_year_auto_selects_independent(self) -> None:
+        argv = [
+            "mortality_roulette.py",
+            "--player", "fi:m:1947",
+            "--player", "fi:f",
+            "--mortality-model", "official",
+        ]
+        with mock.patch.object(sys, "argv", argv), \
+             mock.patch.object(mr, "run_deathmatch", return_value=74) as runner, \
+             mock.patch("builtins.print"):
+            rc = mr.main()
+        self.assertEqual(rc, 74)
+        parsed = runner.call_args.args[0]
+        self.assertEqual(parsed.deathmatch_birth_years, [1947, None])
+        self.assertEqual(parsed.deathmatch_timeline_resolved, "independent")
+
+    def test_calendar_timeline_requires_two_birth_years(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT),
+                "--player", "fi:m:1947",
+                "--player", "fi:f",
+                "--deathmatch-timeline", "calendar",
+                "--mortality-model", "official",
+            ],
+            cwd=ROOT, stdin=subprocess.DEVNULL, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires birth years for both contestants", result.stderr)
 
 
 class DetailCacheIsolationTests(unittest.TestCase):

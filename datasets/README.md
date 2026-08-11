@@ -31,6 +31,42 @@ Statistics Finland open statistical data are redistributed with source attributi
 
 Statistics Canada snapshots are redistributed with source attribution under the **Statistics Canada Open Licence**. The existing CSV download/parser path remains available for refreshes and for supported provinces not bundled here.
 
+### Human Mortality Database (optional local historical source)
+
+Mortality Roulette supports locally supplied **Human Mortality Database (HMD)** country archives for long-run national historical mortality. These files are optional and are **not bundled datasets**: standard present-day Mortality Roulette works without them.
+
+Default local layout:
+
+```text
+local-data/hmd/FIN.zip
+local-data/hmd/CAN.zip
+local-data/hmd/USA.zip
+```
+
+`local-data/` is Git-ignored and excluded from release packages. The HMD reader opens country ZIPs directly and reads only the HMD-created sex-specific 1x1 **period life tables** under `STATS/` (`mltper_1x1.txt` / `fltper_1x1.txt`). It intentionally ignores `InputDB/` and other archive members. Extracted HMD country trees remain supported for backward compatibility.
+
+Historical birth-cohort mortality is obtained by walking the diagonal through period tables: calendar year = birth year + exact age. HMD cohort-table files are therefore not required, and the same method can be applied consistently to countries whose HMD download does not publish a completed cohort life table. For national historical runs, local HMD period tables are preferred when present for their long historical coverage; Statistics Canada’s bundled national history and Statistics Finland’s open cached/downloaded 12ap history are fallbacks when HMD is absent. If a bundled canonical national table contains observed years newer than the installed HMD archive, those newer years may extend the HMD-backed trajectory and are labelled in the source description rather than being discarded. Province-specific Canadian mortality remains Statistics Canada-based because HMD Canada is a national series. Years after the newest observed table still retain the existing explicitly labelled future-hold behavior; no future improvement trend is invented.
+
+Deathmatch can assign a separate birth year to each contestant. When both are known, the default shared-calendar timeline starts with the earlier cohort and holds the later cohort at `WAITING TO BE BORN...` until its birth year; `--deathmatch-timeline independent` instead compares the same attained ages on each cohort's own calendar. Mortality, cause, detail and seasonality layers are resolved against each contestant's actual calendar year. A layer with no historical coverage for the realized death year is reported unavailable rather than backfilled from a later table; future years may use only the explicitly labelled latest-year hold already defined for that layer.
+
+HMD licensing/provenance boundary (checked 2026-08-11):
+
+- HMD states that data constructed by the HMD team, including exposure estimates, death rates and life tables, are published under **CC BY 4.0**.
+- Input data supplied to HMD remain under each original provider's distribution licence.
+- HMD asks users to acknowledge HMD as source/intermediary, note the download/access date, and preferably direct other users to HMD for their own current copy rather than passing around archive copies. Users publishing results should record the date on which their local HMD archive was downloaded/accessed.
+- Mortality Roulette therefore does not redistribute complete HMD country archives. Any Mortality Roulette model or result derived from HMD statistical estimates must identify HMD as a source; this policy does not imply that the HMD-created CC BY 4.0 estimates themselves are proprietary.
+
+HMD citation guidance requests the full database name, institutional sponsors, mortality.org, and access/download date. A practical citation form is: **Human Mortality Database (HMD), Max Planck Institute for Demographic Research, University of California, Berkeley, and French Institute for Demographic Studies; mortality.org; data accessed/downloaded [date].** Country-specific source metadata should also be consulted when deriving or publishing results.
+
+Links:
+
+- HMD: https://www.mortality.org/
+- User Agreement: https://www.mortality.org/Data/UserAgreement
+- Citation Guidelines: https://www.mortality.org/Research/CitationGuidelines
+- Finland: https://www.mortality.org/Country/Country?cntr=FIN
+- Canada: https://www.mortality.org/Country/Country?cntr=CAN
+- United States: https://www.mortality.org/Country/Country?cntr=USA
+
 ### WHO ICD-10 terminology
 
 - WHO ICD-10, Sixth Edition, 2019

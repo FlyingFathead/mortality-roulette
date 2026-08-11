@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.13.9
+
+- Added a generic optional **Human Mortality Database (HMD)** local-data backend for historical birth-cohort mortality. It reads HMD-created sex-specific 1x1 period life tables directly from country ZIPs (or extracted trees) and deliberately ignores `InputDB` material.
+- Added automatic lookup under Git-ignored `local-data/hmd/`, with `--hmd-dir` retained/generalized as an explicit directory/tree/direct-ZIP override. The base program does not create local-data directories merely by running and all standard present-day modes remain HMD-independent.
+- Historical source selection is deterministic: national `--birth-year` runs prefer an installed HMD country archive for long historical coverage, while bundled Statistics Canada and open cached/downloaded Statistics Finland histories remain the fallback when HMD is absent. If a canonical bundled national table has newer observed years than the installed HMD archive (currently Canada 2024 versus HMD Canada 2023), those newer observed years extend the HMD-backed trajectory with explicit source labeling instead of being discarded. Province-specific Canadian runs continue to use province-specific Statistics Canada mortality rather than silently substituting national HMD data.
+- Generalized the parser for HMD country codes FIN/CAN/USA so U.S. archives are parser-ready for future U.S. geography support; this release does not add `--country us`.
+- Added clear missing-HMD guidance for historical years outside bundled/open national coverage, including country source links, and HMD-backed run summaries now print the relevant HMD country page while avoiding startup/licence nags in unrelated modes.
+- HMD-backed run summaries also print the actual local ZIP/tree path that the loader resolved and opened, so local-data provenance and archive selection are directly inspectable.
+- Fixed Finland no-HMD cohort fallback so pre-2024 `--birth-year` runs use the full open StatFin 12ap history/cache rather than mistaking the bundled 2024 snapshot for a historical series; unsupported/missing data now fail cleanly instead of reaching a lookup traceback.
+- Added HMD feature/source/licensing documentation. HMD-created estimates/life tables are identified as CC BY 4.0; separately supplied input data retain provider licences, and complete country archives remain local/non-redistributed by project policy.
+- Added regression tests for direct ZIP reading, extracted-tree compatibility, country isolation, open-age exclusion and source discovery.
+- Added `/local-data/` to `.gitignore` so locally downloaded HMD archives and future local-only data cannot be swept into release commits.
+- Extended Deathmatch with **per-player birth years** via `--player ...:BIRTH_YEAR`, plus `--birth-years YEAR [YEAR]` as a match-level override. A single override year applies to both contestants.
+- Added two historical Deathmatch timeline modes. With both birth years present, `auto` defaults to a shared **calendar** timeline: the earlier cohort starts first and a later cohort displays `WAITING TO BE BORN...` until its own birth year. `--deathmatch-timeline independent` instead starts both players at the same attained age while each advances through its own calendar years. No birth years preserves the existing Deathmatch behavior.
+- Historical Deathmatch now resolves annual qx and downstream cause/detail/seasonality rolls using each contestant's actual calendar year. Pre-coverage cause/timing data remain explicitly unavailable rather than leaking later distributions backward in time; post-coverage years retain the existing labelled future hold. Shared-calendar `long`/`short` outcomes are decided by death calendar year (last alive / first death), while independent mode continues to compare lifespan/death age.
+- Added regression coverage for birth-year player parsing, override/timeline resolution, calendar-year cause propagation and historical result-card year reporting.
+- Fixed shared-calendar Deathmatch arena geometry on ordinary terminal widths: historical mortality provenance now renders on a dedicated second physical row while the comparable year/age/q/roll/result row stays aligned inside each player column. Legacy and independent Deathmatch row rendering remains unchanged.
+- Historical Deathmatch result tables now show `BIRTH YEAR` immediately above `DEATH YEAR` for each contestant, making cohort offsets explicit in the final comparison card.
+
 ## v0.13.8
 
 - Added a sparse, data-driven cause-note layer (`datasets/cause_notes/cause_note_model_v1.json`) for deterministic explanatory annotations that do not alter any mortality or context roll. The first rule covers Finnish `M17` gonarthrosis detail from StatFin 11be and clarifies that the public underlying-cause table does not expose the immediate fatal mechanism or intervening complication.

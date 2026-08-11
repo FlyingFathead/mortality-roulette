@@ -40,10 +40,11 @@ uses the mortality probability for calendar year (YEAR + age) rather than
 reusing one modern period life table for the entire simulated lifetime.
 
 Data backends:
-- Human Mortality Database (HMD) Finland 1x1 period life-table files, if
-  supplied locally, cover 1878–2024.
-- Otherwise the script can download/cache Statistics Finland's open 12ap
-  life table, which supplies age/sex qx for 1986–2024.
+- Optional local Human Mortality Database (HMD) country archives can provide
+  long historical 1x1 period life tables (for example Finland and Canada).
+- Without HMD, Finland can use Statistics Finland 12ap from 1986 onward and
+  Canada can use the bundled Statistics Canada complete life-table series from
+  1980 onward. Standard present-day modes never require HMD.
 
 For calendar years after the newest observed year, cohort mode holds the
 newest observed age-specific mortality schedule constant. It does NOT invent
@@ -98,6 +99,13 @@ from itertools import product
 from pathlib import Path
 
 from mortality_roulette_core.cause_notes import CauseNoteModel
+from mortality_roulette_core.hmd import (
+    HMD_COUNTRY_PAGES,
+    HMD_OPEN_AGE,
+    HmdDataError,
+    find_hmd_source,
+    load_hmd_period_life_table,
+)
 from mortality_roulette_core.external_contexts import ExternalContextModel
 from mortality_roulette_core.places import PlaceModel
 from mortality_roulette_core.suicide_reasons import SuicideReasonModel
@@ -111,11 +119,12 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.8"
+VERSION = "0.13.9"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
+DEFAULT_HMD_DIR = PROJECT_ROOT / "local-data" / "hmd"
 BUNDLED_STATFIN_LIFE_TABLE = DATASETS_ROOT / "finland" / "mortality" / "statfin_12ap_2024.json"
 BUNDLED_STATFIN_CAUSES = DATASETS_ROOT / "finland" / "causes" / "statfin_11az_through_2024.json"
 BUNDLED_STATFIN_DETAIL = DATASETS_ROOT / "finland" / "causes" / "statfin_cause_detail_2024.json"
@@ -454,15 +463,19 @@ class PlayerSpec:
     country: str
     province: str | None
     sex_selection: str
+    birth_year: int | None = None
 
 
 def parse_player_spec(value: str) -> PlayerSpec:
-    """Parse COUNTRY[:PROVINCE]:SEX, e.g. fi:f or ca:on:m."""
+    """Parse COUNTRY[:PROVINCE]:SEX[:BIRTH_YEAR].
+
+    Examples: fi:f, fi:m:1947, ca:on:m, ca:on:f:1962, ca:m:1980.
+    """
     raw = str(value).strip()
     parts = [part.strip() for part in raw.split(":")]
-    if len(parts) not in {2, 3} or any(not part for part in parts):
+    if len(parts) not in {2, 3, 4} or any(not part for part in parts):
         raise ValueError(
-            f"invalid --player specification {value!r}; use fi:m, fi:f, ca:m, or ca:on:m"
+            f"invalid --player specification {value!r}; use fi:m, fi:m:1947, ca:m, ca:on:m, or ca:on:m:1947"
         )
 
     country_token = parts[0].casefold()
@@ -476,12 +489,23 @@ def parse_player_spec(value: str) -> PlayerSpec:
         )
     country = country_aliases[country_token]
 
+    birth_year = None
+    if len(parts) >= 3 and parts[-1].isdigit():
+        birth_year = int(parts[-1])
+        if birth_year < 1:
+            raise ValueError("player birth year must be >= 1")
+        parts = parts[:-1]
+
     if len(parts) == 2:
         province_token = None
         sex_token = parts[1]
-    else:
+    elif len(parts) == 3:
         province_token = parts[1]
         sex_token = parts[2]
+    else:
+        raise ValueError(
+            f"invalid --player specification {value!r}; use fi:m[:YEAR] or ca[:PROVINCE]:m[:YEAR]"
+        )
 
     sex_aliases = {
         "m": "m", "male": "m",
@@ -499,12 +523,15 @@ def parse_player_spec(value: str) -> PlayerSpec:
         if province_token is not None:
             raise ValueError(
                 f"Finland --player specification {value!r} must not include a province; use fi:{sex_selection}"
+                + (f":{birth_year}" if birth_year is not None else "")
             )
         province = None
     else:
         province = normalize_canada_province(province_token) if province_token is not None else None
 
-    return PlayerSpec(country=country, province=province, sex_selection=sex_selection)
+    return PlayerSpec(
+        country=country, province=province, sex_selection=sex_selection, birth_year=birth_year
+    )
 
 
 def canada_province_name(province: str | None) -> str | None:
@@ -703,7 +730,6 @@ def data_progress_enabled() -> bool:
 STATCAN_LIFE_TABLE_URL = (
     "https://www150.statcan.gc.ca/n1/tbl/csv/13100837-eng.zip"
 )
-STATCAN_LIFE_TABLE_FIRST_YEAR = 1980
 DEFAULT_STATCAN_CACHE = (
     Path.home() / ".cache" / "mortality_roulette" / "statcan_canada_lifetable_13100837.json"
 )
@@ -730,8 +756,7 @@ STATFIN_LIFE_TABLE_API = (
     "https://pxdata.stat.fi/PxWeb/api/v1/en/StatFin/kuol/12ap.px"
 )
 STATFIN_FIRST_YEAR = 1986
-HMD_FINLAND_FIRST_YEAR = 1878
-HMD_OPEN_AGE = 110  # HMD's 110+ interval has qx=1 by construction; do not use it as an exact age.
+BUNDLED_STATFIN_SNAPSHOT_YEAR = 2024
 DEFAULT_STATFIN_CACHE = (
     Path.home() / ".cache" / "mortality_roulette" / "statfin_finland_lifetable_qx.json"
 )
@@ -1106,12 +1131,18 @@ class CohortMortalitySource:
         min_year: int,
         max_year: int,
         max_exact_age: int,
+        source_url: str | None = None,
+        local_source: str | None = None,
+        year_source_names: dict[int, str] | None = None,
     ) -> None:
         self.name = name
         self.data = data
         self.min_year = min_year
         self.max_year = max_year
         self.max_exact_age = max_exact_age
+        self.source_url = source_url
+        self.local_source = local_source
+        self.year_source_names = year_source_names or {}
 
     def q_for(
         self,
@@ -1142,13 +1173,14 @@ class CohortMortalitySource:
         if age <= self.max_exact_age:
             q = self.data.get(sex, {}).get(lookup_year, {}).get(age)
             if q is not None:
+                year_source = self.year_source_names.get(lookup_year, self.name)
                 if future_hold:
                     return (
                         q,
-                        f"future hold: {self.max_year} {self.name}",
+                        f"future hold: {self.max_year} {year_source}",
                         True,
                     )
-                return q, f"{self.name} {calendar_year}", False
+                return q, f"{year_source} {calendar_year}", False
 
         # Do not treat an open 110+ interval as an exact annual qx.
         # Fall back to the explicitly labelled extreme-age toy model.
@@ -1859,105 +1891,86 @@ def fetch_statcan_life_table(
     return source
 
 
-def _find_hmd_file(base: Path, sex: str) -> Path | None:
-    filename = "mltper_1x1.txt" if sex == "male" else "fltper_1x1.txt"
-    candidates = [
-        base / filename,
-        base / "STATS" / filename,
-        base / "FIN" / "STATS" / filename,
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _parse_hmd_life_table(path: Path) -> dict[int, dict[int, float]]:
-    """
-    Parse an HMD 1x1 period life table and return year -> age -> qx.
-
-    Expected columns include Year, Age, and qx. The 110+ open interval is
-    deliberately excluded because HMD sets its qx to 1 by construction.
-    """
-    result: dict[int, dict[int, float]] = {}
-
-    with path.open("r", encoding="utf-8-sig") as fh:
-        header = None
-        for raw in fh:
-            line = raw.strip()
-            if not line:
-                continue
-
-            fields = line.split()
-
-            if header is None:
-                lowered = [x.casefold() for x in fields]
-                if "year" in lowered and "age" in lowered and "qx" in lowered:
-                    header = lowered
-                continue
-
-            if len(fields) < len(header):
-                continue
-
-            row = dict(zip(header, fields))
-            year_text = row["year"]
-            age_text = row["age"]
-            q_text = row["qx"]
-
-            if not year_text.isdigit():
-                continue
-            if age_text.endswith("+"):
-                continue
-            if not age_text.isdigit():
-                continue
-            if q_text in {".", "NA", "nan"}:
-                continue
-
-            year = int(year_text)
-            age = int(age_text)
-            if age >= HMD_OPEN_AGE:
-                continue
-
-            try:
-                q = float(q_text)
-            except ValueError:
-                continue
-
-            result.setdefault(year, {})[age] = q
-
-    if not result:
-        raise CohortDataError(f"No usable HMD qx rows found in {path}")
-
-    return result
-
-
-def load_hmd_finland(hmd_dir: Path, needed_sexes: set[str]) -> CohortMortalitySource:
-    data: dict[str, dict[int, dict[int, float]]] = {}
-
-    for sex in needed_sexes:
-        path = _find_hmd_file(hmd_dir, sex)
-        if path is None:
-            filename = "mltper_1x1.txt" if sex == "male" else "fltper_1x1.txt"
-            raise CohortDataError(
-                f"HMD file {filename} not found under {hmd_dir}"
-            )
-        data[sex] = _parse_hmd_life_table(path)
-
-    # Populate an unused sex with an empty dict so q_for() remains simple.
-    data.setdefault("male", {})
-    data.setdefault("female", {})
-
-    year_sets = [set(data[sex]) for sex in needed_sexes]
-    common_years = sorted(set.intersection(*year_sets))
-    if not common_years:
-        raise CohortDataError("HMD files have no common usable calendar years")
+def load_hmd_country(
+    hmd_base: Path,
+    *,
+    country_code: str,
+    needed_sexes: set[str],
+) -> CohortMortalitySource:
+    """Load optional local HMD 1x1 period life tables into cohort lookup form."""
+    try:
+        hmd = load_hmd_period_life_table(
+            hmd_base, country_code=country_code, needed_sexes=needed_sexes
+        )
+    except HmdDataError as exc:
+        raise CohortDataError(str(exc)) from exc
 
     return CohortMortalitySource(
-        name="HMD Finland 1x1 period life table",
+        name=f"HMD {hmd.country_name} 1x1 period life table",
+        data=hmd.data,
+        min_year=hmd.min_year,
+        max_year=hmd.max_year,
+        max_exact_age=hmd.max_exact_age,
+        source_url=HMD_COUNTRY_PAGES[country_code],
+        local_source=hmd.source,
+    )
+
+
+def _extend_with_newer_observed_years(
+    primary: CohortMortalitySource,
+    extension: CohortMortalitySource,
+) -> CohortMortalitySource:
+    """Append observed years newer than *primary* without replacing its history."""
+    if extension.max_year <= primary.max_year:
+        return primary
+
+    data: dict[str, dict[int, dict[int, float]]] = {"male": {}, "female": {}}
+    year_source_names: dict[int, str] = {}
+    for sex in ("male", "female"):
+        primary_years = primary.data.get(sex, {})
+        if not primary_years:
+            continue
+        combined = {year: dict(ages) for year, ages in primary_years.items()}
+        for year in primary_years:
+            year_source_names[int(year)] = primary.year_source_names.get(int(year), primary.name)
+        for year, ages in extension.data.get(sex, {}).items():
+            if year > primary.max_year:
+                combined[int(year)] = dict(ages)
+                year_source_names[int(year)] = extension.year_source_names.get(int(year), extension.name)
+        data[sex] = combined
+
+    appended_start = primary.max_year + 1
+    return CohortMortalitySource(
+        name=(
+            f"{primary.name}; {extension.name} observed extension "
+            f"{appended_start}–{extension.max_year}"
+        ),
         data=data,
-        min_year=common_years[0],
-        max_year=common_years[-1],
-        max_exact_age=HMD_OPEN_AGE - 1,
+        min_year=primary.min_year,
+        max_year=extension.max_year,
+        max_exact_age=min(primary.max_exact_age, extension.max_exact_age),
+        source_url=primary.source_url,
+        local_source=primary.local_source,
+        year_source_names=year_source_names,
+    )
+
+
+def _hmd_missing_message(
+    *,
+    country_code: str,
+    country_name: str,
+    first_calendar_year: int,
+    fallback_name: str,
+    fallback_first_year: int,
+) -> str:
+    page = HMD_COUNTRY_PAGES[country_code]
+    return (
+        f"cohort simulation begins in {first_calendar_year}, before {fallback_name} "
+        f"starts in {fallback_first_year}. Optional Human Mortality Database (HMD) "
+        f"historical data can extend {country_name} farther back. Register/login at "
+        f"mortality.org, download the {country_name} country archive, and place "
+        f"{country_code}.zip under {DEFAULT_HMD_DIR}. Source: {page}. "
+        "Standard non-historical Mortality Roulette modes do not require HMD."
     )
 
 
@@ -1975,38 +1988,102 @@ def prepare_cohort_source(
         if selection == "r"
         else {"male"} if selection == "m" else {"female"}
     )
-
     first_calendar_year = birth_year + start_age
 
+    # Explicit --hmd-dir means "use this HMD source" and should fail loudly if
+    # it is wrong. Otherwise, quietly auto-detect the conventional local path.
     if hmd_dir is not None:
-        source = load_hmd_finland(hmd_dir, needed_sexes)
-    else:
-        # Auto-detect HMD files in the working directory before going online.
-        auto_hmd = Path.cwd()
-        found_all = all(_find_hmd_file(auto_hmd, sex) for sex in needed_sexes)
-        if found_all:
-            source = load_hmd_finland(auto_hmd, needed_sexes)
-        else:
-            if first_calendar_year < STATFIN_FIRST_YEAR:
-                raise CohortDataError(
-                    f"--birth-year {birth_year} with --start-age {start_age} begins "
-                    f"in calendar year {first_calendar_year}, but Statistics Finland's "
-                    f"open age-specific qx table starts in {STATFIN_FIRST_YEAR}. "
-                    "For older cohorts, download the HMD Finland 1x1 period life-table "
-                    "files (mltper_1x1.txt / fltper_1x1.txt) and use --hmd-dir PATH."
-                )
-            source = fetch_statfin_life_table(
-                cache_path=statfin_cache,
-                refresh=refresh_statfin,
+        return load_hmd_country(hmd_dir, country_code="FIN", needed_sexes=needed_sexes)
+
+    if find_hmd_source(DEFAULT_HMD_DIR, "FIN") is not None:
+        return load_hmd_country(
+            DEFAULT_HMD_DIR, country_code="FIN", needed_sexes=needed_sexes
+        )
+
+    if first_calendar_year < STATFIN_FIRST_YEAR:
+        raise CohortDataError(
+            _hmd_missing_message(
+                country_code="FIN", country_name="Finland",
+                first_calendar_year=first_calendar_year,
+                fallback_name="Statistics Finland's open age-specific qx table",
+                fallback_first_year=STATFIN_FIRST_YEAR,
             )
+        )
+
+    try:
+        source = fetch_statfin_life_table(
+            cache_path=statfin_cache,
+            refresh=refresh_statfin,
+        )
+    except CohortDataError as exc:
+        page = HMD_COUNTRY_PAGES["FIN"]
+        raise CohortDataError(
+            f"{exc} Optional alternative: download the Finland HMD country archive "
+            f"and place FIN.zip under {DEFAULT_HMD_DIR}. Source: {page}."
+        ) from exc
 
     if first_calendar_year < source.min_year:
         raise CohortDataError(
-            f"cohort simulation begins in {first_calendar_year}, before "
-            f"{source.name} starts in {source.min_year}"
+            _hmd_missing_message(
+                country_code="FIN", country_name="Finland",
+                first_calendar_year=first_calendar_year,
+                fallback_name=source.name,
+                fallback_first_year=source.min_year,
+            )
         )
-
     return source
+
+
+def prepare_canada_cohort_source(
+    *,
+    birth_year: int,
+    start_age: int,
+    selection: str,
+    hmd_dir: Path | None,
+    statcan_source: CohortMortalitySource,
+    province: str | None,
+) -> CohortMortalitySource:
+    """Prefer national HMD for national Canada; preserve province-specific StatCan."""
+    needed_sexes = (
+        {"male", "female"}
+        if selection == "r"
+        else {"male"} if selection == "m" else {"female"}
+    )
+    first_calendar_year = birth_year + start_age
+
+    if province is None:
+        hmd_source: CohortMortalitySource | None = None
+        if hmd_dir is not None:
+            hmd_source = load_hmd_country(
+                hmd_dir, country_code="CAN", needed_sexes=needed_sexes
+            )
+        elif find_hmd_source(DEFAULT_HMD_DIR, "CAN") is not None:
+            hmd_source = load_hmd_country(
+                DEFAULT_HMD_DIR, country_code="CAN", needed_sexes=needed_sexes
+            )
+        if hmd_source is not None:
+            # HMD Canada can lag the bundled StatCan snapshot by a year. Keep
+            # the long HMD history but do not discard newer observed national
+            # qx merely to preserve a single source family. The combined source
+            # is labelled explicitly rather than silently future-holding stale qx.
+            return _extend_with_newer_observed_years(hmd_source, statcan_source)
+
+    if first_calendar_year < statcan_source.min_year:
+        if province is not None:
+            raise CohortDataError(
+                f"province-specific Canadian cohort data for {province.upper()} begin in "
+                f"{statcan_source.min_year}; the optional HMD Canada archive is national "
+                "and is not silently substituted for provincial mortality."
+            )
+        raise CohortDataError(
+            _hmd_missing_message(
+                country_code="CAN", country_name="Canada",
+                first_calendar_year=first_calendar_year,
+                fallback_name="the bundled Statistics Canada complete life-table series",
+                fallback_first_year=statcan_source.min_year,
+            )
+        )
+    return statcan_source
 
 
 def cohort_q_for_age(
@@ -7636,6 +7713,10 @@ def print_mortality_odds_table(
         print(f"mortality mode: BIRTH COHORT / CALENDAR-YEAR | birth year: {birth_year}")
         if cohort_source is not None:
             print(f"mortality source: {cohort_source.name} ({cohort_source.min_year}–{cohort_source.max_year})")
+            if cohort_source.local_source:
+                print(f"HMD local source: {cohort_source.local_source}")
+            if cohort_source.source_url:
+                print(f"HMD source page: {cohort_source.source_url}")
     if ACTIVE_BOOZEHOUND:
         print(
             f"lifestyle modifier: {boozehound_preset_icon()} {boozehound_preset_label()} | "
@@ -7882,6 +7963,10 @@ def simulate(
                 f"observed mortality source: {cohort_source.name} "
                 f"({cohort_source.min_year}–{cohort_source.max_year})"
             )
+            if cohort_source.local_source:
+                print(f"HMD local source: {cohort_source.local_source}")
+            if cohort_source.source_url:
+                print(f"HMD source page: {cohort_source.source_url}")
             print(
                 f"future rule: hold {cohort_source.max_year} age-specific qx constant"
             )
@@ -8962,6 +9047,8 @@ def run_batch(
             f"observed source: {cohort_source.name} "
             f"({cohort_source.min_year}–{cohort_source.max_year})"
         )
+        if cohort_source.source_url:
+            print(f"HMD source page: {cohort_source.source_url}")
         print(
             f"future rule: hold {cohort_source.max_year} age-specific qx constant"
         )
@@ -9290,12 +9377,55 @@ def _preflight_deathmatch_country(
     return ctx
 
 
+def _prepare_deathmatch_cohort_source(
+    args: argparse.Namespace,
+    ctx: dict[str, object],
+    *,
+    country: str,
+    province: str | None,
+    selection: str,
+    birth_year: int | None,
+) -> CohortMortalitySource | None:
+    """Resolve one contestant's optional birth-cohort mortality source."""
+    if birth_year is None:
+        return None
+    if country == "ca":
+        statcan_source = ctx.get("period_source")
+        if not isinstance(statcan_source, CohortMortalitySource):
+            raise CohortDataError("internal error: Canadian Deathmatch side has no StatCan period source")
+        return prepare_canada_cohort_source(
+            birth_year=birth_year,
+            start_age=args.start_age,
+            selection=selection,
+            hmd_dir=args.hmd_dir,
+            statcan_source=statcan_source,
+            province=province,
+        )
+
+    first_calendar_year = birth_year + args.start_age
+    if args.statfin_cache is not None:
+        statfin_cache = args.statfin_cache
+    elif args.refresh_statfin or first_calendar_year < BUNDLED_STATFIN_SNAPSHOT_YEAR:
+        statfin_cache = DEFAULT_STATFIN_CACHE
+    else:
+        statfin_cache = BUNDLED_STATFIN_LIFE_TABLE
+    return prepare_cohort_source(
+        birth_year=birth_year,
+        start_age=args.start_age,
+        selection=selection,
+        hmd_dir=args.hmd_dir,
+        statfin_cache=statfin_cache,
+        refresh_statfin=args.refresh_statfin,
+    )
+
+
 def _deathmatch_roll_cause_stack(
     ctx: dict[str, object],
     *,
     sex: str,
     age: int,
     cause_detail_mode: str,
+    calendar_year: int | None = None,
 ) -> dict[str, object]:
     """Roll cause/detail/month for a contestant after its mortality roll has lost."""
     _activate_deathmatch_context(ctx)
@@ -9317,7 +9447,7 @@ def _deathmatch_roll_cause_stack(
         cause_outcome = cause_source.roll(
             sex=sex,
             age=age,
-            calendar_year=None,
+            calendar_year=calendar_year,
             rng=ctx["cause_rng"],
         )
 
@@ -9331,7 +9461,7 @@ def _deathmatch_roll_cause_stack(
             broad_outcome=cause_outcome,
             sex=sex,
             age=age,
-            calendar_year=None,
+            calendar_year=calendar_year,
             rng=ctx["detail_rng"],
         )
 
@@ -9418,7 +9548,7 @@ def _deathmatch_roll_cause_stack(
         seasonal_outcome = seasonal_source.roll(
             broad_outcome=cause_outcome,
             sex=sex,
-            calendar_year=None,
+            calendar_year=calendar_year,
             rng=ctx["seasonal_rng"],
         )
 
@@ -9435,6 +9565,21 @@ def _deathmatch_roll_cause_stack(
         "traffic_context": traffic_context_outcome,
         "seasonal": seasonal_outcome,
     }
+
+
+def _split_deathmatch_source_suffix(body: str) -> tuple[str, str | None]:
+    """Split the trailing historical mortality-source annotation from one arena cell.
+
+    Historical Deathmatch cells append their source as the final ``[source]``
+    fragment.  Shared-calendar mode renders that provenance on a second
+    physical row so the q/roll comparison stays aligned within the terminal.
+    """
+    text = str(body)
+    if text.endswith("]") and " [" in text:
+        main, suffix = text.rsplit(" [", 1)
+        if suffix:
+            return main, suffix[:-1]
+    return text, None
 
 
 def _deathmatch_cell(
@@ -9457,7 +9602,17 @@ def _deathmatch_cell(
         enabled=(country == "fi" and not exceptional_tail),
     )
 
-    q0, tail_model = q_for_age(age, sex)
+    birth_year = ctx.get("birth_year")
+    cohort_source = ctx.get("cohort_source")
+    source_label = None
+    if birth_year is not None:
+        if not isinstance(cohort_source, CohortMortalitySource):
+            raise CohortDataError("internal error: Deathmatch birth-year side has no cohort source")
+        q0, source_label, tail_model = cohort_q_for_age(
+            age=age, sex=sex, birth_year=int(birth_year), source=cohort_source
+        )
+    else:
+        q0, tail_model = q_for_age(age, sex)
     if ACTIVE_BOOZEHOUND:
         q, mult, alcohol_diag = alcohol_adjust_q(
             q0, age=age, sex=sex, cause_source=ctx.get("cause_source")
@@ -9479,6 +9634,8 @@ def _deathmatch_cell(
             f"q {q * 100:.4f}%{booze} | "
             f"roll {float(roll) * 100:.4f}% | {status}{tail}"
         )
+        if source_label is not None:
+            body += f" [{source_label}]"
 
     if died:
         state["dead"] = True
@@ -9489,6 +9646,10 @@ def _deathmatch_cell(
         state["alcohol_diag"] = alcohol_diag
         state["roll"] = roll
         state["forced"] = forced
+        if birth_year is not None:
+            state["death_year"] = int(birth_year) + age
+        if source_label is not None:
+            state["mortality_source_label"] = source_label
 
     return body
 
@@ -9516,6 +9677,11 @@ def _print_deathmatch_final_card(
     heading = f"{label} FINAL CARD"
     print(heading)
     print("=" * _terminal_display_width(heading))
+    birth_year = ctx.get("birth_year")
+    cohort_source = ctx.get("cohort_source")
+    if birth_year is not None:
+        print(f"birth year: {int(birth_year)}")
+        print(f"death calendar year: {int(state.get('death_year', int(birth_year) + age))}")
 
     stack = state.get("cause_stack") or {}
     cause_outcome = stack.get("cause")
@@ -9560,8 +9726,8 @@ def _print_deathmatch_final_card(
             age,
             sex,
             start_age=start_age,
-            birth_year=None,
-            cohort_source=None,
+            birth_year=(int(birth_year) if birth_year is not None else None),
+            cohort_source=(cohort_source if isinstance(cohort_source, CohortMortalitySource) else None),
             alcohol_cause_source=ctx.get("cause_source"),
         )
     print()
@@ -9622,6 +9788,11 @@ def _deathmatch_compact_stats(
     seasonal = stack.get("seasonal") if isinstance(stack, dict) else None
 
     rows: list[tuple[str, str]] = [("TAPPED OUT", f"age {age}")]
+    if ctx.get("birth_year") is not None:
+        birth_year = int(ctx["birth_year"])
+        death_year = int(state.get("death_year", birth_year + age))
+        rows.append(("BIRTH YEAR", str(birth_year)))
+        rows.append(("DEATH YEAR", str(death_year)))
     q = state.get("q")
     q0 = state.get("baseline_q")
     mult = state.get("mult")
@@ -9706,8 +9877,12 @@ def _deathmatch_compact_stats(
         years = boozehound_exposure_years(age)
         kg = boozehound_cumulative_ethanol_kg(age)
         eq = boozehound_beverage_equivalents(kg)
+        birth_year = ctx.get("birth_year")
+        cohort_source = ctx.get("cohort_source")
         metrics = boozehound_cumulative_survival_metrics(
-            age, sex, start_age=start_age, birth_year=None, cohort_source=None,
+            age, sex, start_age=start_age,
+            birth_year=(int(birth_year) if birth_year is not None else None),
+            cohort_source=(cohort_source if isinstance(cohort_source, CohortMortalitySource) else None),
             alcohol_cause_source=ctx.get("cause_source"),
         )
         rows.extend([
@@ -9720,12 +9895,18 @@ def _deathmatch_compact_stats(
     return rows
 
 
-def _deathmatch_win_reason(win_mode: str) -> str:
+def _deathmatch_win_reason(win_mode: str, timeline_mode: str = "independent") -> str:
     """Return the short human-readable reason shown beside the winner trophy."""
-    if win_mode == "long":
-        return "lived longer"
-    if win_mode == "short":
-        return "died sooner"
+    if timeline_mode == "calendar":
+        if win_mode == "long":
+            return "last alive"
+        if win_mode == "short":
+            return "died first"
+    else:
+        if win_mode == "long":
+            return "lived longer"
+        if win_mode == "short":
+            return "died sooner"
     raise ValueError(f"unknown deathmatch win mode: {win_mode!r}")
 
 
@@ -9735,11 +9916,12 @@ def _deathmatch_result_header_parts(
     width: int,
     winner: bool,
     win_mode: str,
+    timeline_mode: str = "independent",
 ) -> tuple[str, str]:
     """Return (country title, regular suffix) fitted to one result column."""
     if not winner:
         return _terminal_truncate(label, width), ""
-    suffix = f" 🏆 ({_deathmatch_win_reason(win_mode)})"
+    suffix = f" 🏆 ({_deathmatch_win_reason(win_mode, timeline_mode)})"
     suffix_width = _terminal_display_width(suffix)
     if suffix_width >= width:
         return "", _terminal_truncate(suffix, width)
@@ -9753,10 +9935,11 @@ def _deathmatch_result_header_label(
     width: int,
     winner: bool,
     win_mode: str,
+    timeline_mode: str = "independent",
 ) -> str:
     """Fit a contestant label into its result column, preserving winner status."""
     base, suffix = _deathmatch_result_header_parts(
-        label, width=width, winner=winner, win_mode=win_mode
+        label, width=width, winner=winner, win_mode=win_mode, timeline_mode=timeline_mode
     )
     return f"{base}{suffix}"
 
@@ -9767,10 +9950,11 @@ def _deathmatch_result_header_render(
     width: int,
     winner: bool,
     win_mode: str,
+    timeline_mode: str = "independent",
 ) -> str:
     """Render a result header with only the country title in bold bright white."""
     base, suffix = _deathmatch_result_header_parts(
-        label, width=width, winner=winner, win_mode=win_mode
+        label, width=width, winner=winner, win_mode=win_mode, timeline_mode=timeline_mode
     )
     plain = f"{base}{suffix}"
     padding = " " * max(0, width - _terminal_display_width(plain))
@@ -9822,6 +10006,7 @@ def _print_deathmatch_result_table(
     start_age: int = 0,
     winner_idx: int | None,
     win_mode: str,
+    timeline_mode: str = "independent",
 ) -> None:
     """Print a compact two-column post-match comparison, sports-card style."""
     terminal_columns = max(80, shutil.get_terminal_size(fallback=(180, 24)).columns)
@@ -9851,7 +10036,7 @@ def _print_deathmatch_result_table(
             labels[i],
             width=column_width,
             winner=(winner_idx == i),
-            win_mode=win_mode,
+            win_mode=win_mode, timeline_mode=timeline_mode,
         )
         for i in range(2)
     ]
@@ -9972,18 +10157,20 @@ def _sample_deathmatch_broad_causes_grouped(
     source: object,
     country: str,
     rng: random.Random,
+    birth_year: int | None = None,
 ) -> Counter[str]:
     """Bulk-sample broad causes for one Deathmatch side by sex/death-age cell."""
     totals: Counter[str] = Counter()
     for (sex, age), n in grouped_results.items():
+        calendar_year = birth_year + age if birth_year is not None else None
         if isinstance(source, CauseOfDeathSource):
             dist = _statfin_grouped_cause_distribution(
-                source=source, sex=sex, age=age, calendar_year=None
+                source=source, sex=sex, age=age, calendar_year=calendar_year
             )
             mapper = _statfin_broad_batch_key_from_label
         elif isinstance(source, CanadaCauseOfDeathSource):
             dist = _canada_grouped_cause_distribution(
-                source=source, sex=sex, age=age, calendar_year=None
+                source=source, sex=sex, age=age, calendar_year=calendar_year
             )
             mapper = lambda label: label
         else:
@@ -10053,16 +10240,24 @@ def run_deathmatch_batch(
         print("--runs must be > 0", file=sys.stderr)
         return 2
 
+    birth_years = [ctx.get("birth_year") for ctx in contexts]
+    timeline_mode = str(getattr(args, "deathmatch_timeline_resolved", "independent"))
+    calendar_result = timeline_mode == "calendar" and all(year is not None for year in birth_years)
+
     cdfs: list[dict[str, tuple[list[int], list[float]]]] = [{}, {}]
     for idx, ctx in enumerate(contexts):
         _activate_deathmatch_context(ctx)
         country = countries[idx]
         needed = ("male", "female") if selections[idx] == "r" else (("male",) if selections[idx] == "m" else ("female",))
         for resolved_sex in needed:
+            birth_year = ctx.get("birth_year")
+            cohort_source = ctx.get("cohort_source")
             cdfs[idx][resolved_sex] = build_death_age_cdf(
                 resolved_sex,
                 start_age=args.start_age,
                 use_record_cap=(country != "ca" and not args.exceptional_tail),
+                birth_year=(int(birth_year) if birth_year is not None else None),
+                cohort_source=(cohort_source if isinstance(cohort_source, CohortMortalitySource) else None),
                 alcohol_cause_source=ctx.get("cause_source"),
             )
 
@@ -10100,12 +10295,16 @@ def run_deathmatch_batch(
             age_counts_by_side[idx][age] += 1
             cause_cells_by_side[idx][(sexes[idx], age)] += 1
             pair.append(age)
-        winner_idx, _result_age = _deathmatch_result(pair, args.deathmatch_win)
+        if calendar_result:
+            result_pair = [int(birth_years[idx]) + pair[idx] for idx in (0, 1)]
+        else:
+            result_pair = pair
+        winner_idx, _result_value = _deathmatch_result(result_pair, args.deathmatch_win)
         if winner_idx is None:
             draws += 1
         else:
             wins[winner_idx] += 1
-        diff = pair[0] - pair[1]
+        diff = result_pair[0] - result_pair[1]
         margin_counts[abs(diff)] += 1
         if diff >= 10:
             left_10 += 1
@@ -10141,7 +10340,11 @@ def run_deathmatch_batch(
         if not isinstance(cause_rng, random.Random):
             raise CauseDataError("internal error: Deathmatch cause source has no RNG")
         cause_counts[idx] = _sample_deathmatch_broad_causes_grouped(
-            grouped_results=cause_cells_by_side[idx], source=source, country=countries[idx], rng=cause_rng
+            grouped_results=cause_cells_by_side[idx],
+            source=source,
+            country=countries[idx],
+            rng=cause_rng,
+            birth_year=(int(birth_years[idx]) if birth_years[idx] is not None else None),
         )
 
     labels = [
@@ -10163,6 +10366,15 @@ def run_deathmatch_batch(
     print(f"{labels[0]}  ⚔  {labels[1]}")
     print(f"matches: {runs:,}")
     print(f"starting age: {args.start_age}")
+    if any(year is not None for year in birth_years):
+        print(f"deathmatch timeline: {timeline_mode.upper()}")
+        print(
+            "birth years: "
+            + " | ".join(
+                f"PLAYER {idx + 1} {int(year)}" if year is not None else f"PLAYER {idx + 1} present-day"
+                for idx, year in enumerate(birth_years)
+            )
+        )
     if shared_sex:
         if selections[0] == "r":
             counts = sex_counts_by_side[0]
@@ -10180,11 +10392,24 @@ def run_deathmatch_batch(
             else:
                 sex_parts.append(f"PLAYER {idx + 1} {'male' if selections[idx] == 'm' else 'female'}")
         print("player sexes: " + " | ".join(sex_parts))
-    print(
-        "win condition: LONGEVITY (long) — later death wins"
-        if args.deathmatch_win == "long"
-        else "win condition: BREVITY (short) — earlier death wins"
-    )
+    if calendar_result:
+        print(
+            "win condition: LONGEVITY (long) — later death calendar year / last alive wins"
+            if args.deathmatch_win == "long"
+            else "win condition: BREVITY (short) — earlier death calendar year / first death wins"
+        )
+    elif any(year is not None for year in birth_years):
+        print(
+            "win condition: LONGEVITY (long) — later death age wins"
+            if args.deathmatch_win == "long"
+            else "win condition: BREVITY (short) — earlier death age wins"
+        )
+    else:
+        print(
+            "win condition: LONGEVITY (long) — later death wins"
+            if args.deathmatch_win == "long"
+            else "win condition: BREVITY (short) — earlier death wins"
+        )
     print(f"deathmatch RNG seed: {match_seed} (independent deterministic mortality streams per side)")
     if ACTIVE_MORTALITY_MODEL == "legacy" and any(country == "ca" for country in countries):
         print("mortality models: Finland original legacy Mortality Roulette | Canada official raw period table")
@@ -10235,14 +10460,15 @@ def run_deathmatch_batch(
         )
     mean_margin = sum(gap * count for gap, count in margin_counts.items()) / runs
     print(
-        f"absolute death-age gap: mean {mean_margin:.2f} y | "
+        f"absolute {'death-year' if calendar_result else 'death-age'} gap: mean {mean_margin:.2f} y | "
         f"median {_deathmatch_batch_percentile_counts(margin_counts, 0.50)} y | "
         f"p90 {_deathmatch_batch_percentile_counts(margin_counts, 0.90)} y"
     )
 
     print()
-    print("paired death-age difference")
-    print("---------------------------")
+    paired_heading = "paired death-year difference" if calendar_result else "paired death-age difference"
+    print(paired_heading)
+    print("-" * len(paired_heading))
     print(f"{labels[0]} dies ≥10 y later: {left_10 / runs * 100:7.3f}%  ({left_10:,})")
     print(f"within ±2 years:            {within_2 / runs * 100:7.3f}%  ({within_2:,})")
     print(f"{labels[1]} dies ≥10 y later: {right_10 / runs * 100:7.3f}%  ({right_10:,})")
@@ -10302,9 +10528,12 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
     if args.log:
         print("--log is not supported with --deathmatch yet", file=sys.stderr)
         return 2
-    if args.birth_year is not None:
-        print("--birth-year is not supported with --deathmatch yet; use present-day period tables", file=sys.stderr)
-        return 2
+
+    birth_years = list(getattr(args, "deathmatch_birth_years", [None, None]))
+    if len(birth_years) != 2:
+        birth_years = [None, None]
+    timeline_mode = str(getattr(args, "deathmatch_timeline_resolved", "independent"))
+    historical_deathmatch = any(year is not None for year in birth_years)
 
     batch_mode = args.runs is not None
     if batch_mode and int(args.runs) <= 0:
@@ -10368,6 +10597,15 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
                 contestant_index=idx,
             )
             ctx["player_number"] = player_numbers[idx]
+            ctx["birth_year"] = birth_years[idx]
+            ctx["cohort_source"] = _prepare_deathmatch_cohort_source(
+                args,
+                ctx,
+                country=country,
+                province=provinces[idx],
+                selection=selections[idx],
+                birth_year=(int(birth_years[idx]) if birth_years[idx] is not None else None),
+            )
             contexts.append(ctx)
     except (CohortDataError, CauseDataError, OSError, urllib.error.URLError, zipfile.BadZipFile, json.JSONDecodeError, csv.Error) as exc:
         print(f"deathmatch data error: {exc}", file=sys.stderr)
@@ -10421,10 +10659,35 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
         for idx in (0, 1):
             if selections[idx] == "r":
                 print(f"PLAYER {idx + 1} random sex selection: {sexes[idx]}")
-    if args.deathmatch_win == "long":
-        print("deathmatch win condition: LONGEVITY (long) — last contestant standing wins; same-age tap-outs = draw")
+    if historical_deathmatch:
+        print(f"deathmatch timeline: {timeline_mode.upper()}")
+        for idx in (0, 1):
+            year = birth_years[idx]
+            if year is None:
+                print(f"PLAYER {idx + 1} birth year: not set (present-day period-table timeline)")
+                continue
+            source = contexts[idx].get("cohort_source")
+            print(f"PLAYER {idx + 1} birth year: {int(year)}")
+            if isinstance(source, CohortMortalitySource):
+                print(f"PLAYER {idx + 1} mortality source: {source.name} ({source.min_year}–{source.max_year})")
+                if source.local_source:
+                    print(f"PLAYER {idx + 1} HMD/local source: {source.local_source}")
+                if source.source_url:
+                    print(f"PLAYER {idx + 1} source page: {source.source_url}")
+    if not historical_deathmatch:
+        if args.deathmatch_win == "long":
+            print("deathmatch win condition: LONGEVITY (long) — last contestant standing wins; same-age tap-outs = draw")
+        else:
+            print("deathmatch win condition: BREVITY (short) — first contestant to tap out wins; same-age tap-outs = draw")
+    elif timeline_mode == "calendar" and all(year is not None for year in birth_years):
+        if args.deathmatch_win == "long":
+            print("deathmatch win condition: LONGEVITY (long) — last contestant alive in shared calendar time wins; same death year = draw")
+        else:
+            print("deathmatch win condition: BREVITY (short) — first contestant to die in shared calendar time wins; same death year = draw")
+    elif args.deathmatch_win == "long":
+        print("deathmatch win condition: LONGEVITY (long) — greater lifespan wins; same-age tap-outs = draw")
     else:
-        print("deathmatch win condition: BREVITY (short) — first contestant to tap out wins; same-age tap-outs = draw")
+        print("deathmatch win condition: BREVITY (short) — shorter lifespan wins; same-age tap-outs = draw")
     print(f"deathmatch RNG seed: {match_seed} (independent annual mortality rolls per player)")
     if ACTIVE_MORTALITY_MODEL == "legacy" and any(country == "ca" for country in countries):
         print("mortality models: Finland original legacy Mortality Roulette | Canada official raw period table")
@@ -10502,69 +10765,172 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
         countries[1], sexes[1], province=provinces[1], player_number=player_numbers[1]
     )
     terminal_columns = shutil.get_terminal_size(fallback=(180, 24)).columns
-    # 72 cells/side is enough for the compact annual row. Wider terminals get
-    # more breathing room; very narrow terminals may wrap naturally rather than
-    # requiring a curses/full-screen dependency.
-    column_width = max(72, min(100, (terminal_columns - 3) // 2))
+    if timeline_mode == "calendar":
+        # Shared-calendar rows carry both q/roll information and historical
+        # provenance.  Respect the actual half-terminal width and put source
+        # provenance on a second physical row rather than letting either cell
+        # bulldoze through the center divider.
+        column_width = max(1, min(100, (terminal_columns - 3) // 2))
+    else:
+        # Preserve the legacy/independent arena geometry byte-for-byte where
+        # practical; historical calendar presentation is the only two-row mode.
+        column_width = max(72, min(100, (terminal_columns - 3) // 2))
     print(_deathmatch_grid_rule(column_width, junction="┬"))
-    print(f"{_terminal_pad(left_label, column_width)} │ {right_label}")
+    if timeline_mode == "calendar":
+        left_header = _terminal_pad(_terminal_truncate(left_label, column_width), column_width)
+        right_header = _terminal_pad(_terminal_truncate(right_label, column_width), column_width)
+        print(f"{left_header} │ {right_header}")
+    else:
+        print(f"{_terminal_pad(left_label, column_width)} │ {right_label}")
     print(_deathmatch_grid_rule(column_width, junction="┼"))
 
     states = [{"dead": False}, {"dead": False}]
-    age = args.start_age
 
-    while not all(bool(st.get("dead")) for st in states):
-        cells: list[str] = []
-        newly_dead: list[int] = []
-        for idx, (ctx, state) in enumerate(zip(contexts, states)):
-            mortality_roll = mortality_rngs[idx].random()
-            was_dead = bool(state.get("dead"))
-            cell = _deathmatch_cell(
-                ctx,
-                state,
-                age=age,
-                sex=sexes[idx],
-                exceptional_tail=args.exceptional_tail,
-                mortality_roll=mortality_roll,
-            )
-            cells.append(cell)
-            if not was_dead and state.get("dead"):
-                newly_dead.append(idx)
+    if timeline_mode == "calendar" and all(year is not None for year in birth_years):
+        entry_years = [int(birth_years[i]) + int(args.start_age) for i in (0, 1)]
+        calendar_year = min(entry_years)
+        while not all(bool(st.get("dead")) for st in states):
+            cells: list[str] = []
+            source_cells: list[str] = []
+            newly_dead: list[int] = []
+            for idx, (ctx, state) in enumerate(zip(contexts, states)):
+                birth_year = int(birth_years[idx])
+                age = calendar_year - birth_year
+                if calendar_year < entry_years[idx]:
+                    if calendar_year < birth_year:
+                        cell = f"year {calendar_year} | WAITING TO BE BORN... (birth {birth_year})"
+                    else:
+                        cell = (
+                            f"year {calendar_year} | age {age:3d} | "
+                            f"WAITING TO REACH START AGE {args.start_age}"
+                        )
+                    cells.append(cell)
+                    source_cells.append("")
+                    continue
 
-        age_prefix = f"age {age:3d}->{age + 1:3d} | "
-        left = age_prefix + cells[0]
-        right = age_prefix + cells[1]
-        print(f"{_terminal_pad(left, column_width)} │ {right}", flush=True)
+                was_dead = bool(state.get("dead"))
+                if was_dead:
+                    death_age = int(state["death_age"])
+                    death_year = int(state.get("death_year", birth_year + death_age))
+                    cells.append(
+                        f"year {calendar_year} | ☠ dead since {death_year} at age {death_age}"
+                    )
+                    source_cells.append("")
+                    continue
 
-        # Live arena announcement stays in the contestant's own column.
-        # Fatal rolls are neutral tap-outs; the one trophy is awarded only
-        # after the configured long/short win condition is evaluated.
-        if newly_dead:
-            print(
-                _deathmatch_live_tapout_row(
-                    newly_dead,
-                    countries=countries,
-                    provinces=provinces,
-                    player_numbers=player_numbers,
-                    states=states,
-                    sexes=sexes,
-                    column_width=column_width,
-                    blink=True,
-                ),
-                flush=True,
-            )
+                mortality_roll = mortality_rngs[idx].random()
+                cell_body = _deathmatch_cell(
+                    ctx, state, age=age, sex=sexes[idx],
+                    exceptional_tail=args.exceptional_tail, mortality_roll=mortality_roll,
+                )
+                cell_main, source_label = _split_deathmatch_source_suffix(cell_body)
+                cells.append(f"year {calendar_year} | age {age:3d}->{age + 1:3d} | {cell_main}")
+                source_cells.append(f"source: {source_label}" if source_label else "")
+                if state.get("dead"):
+                    newly_dead.append(idx)
 
-        for idx in newly_dead:
-            states[idx]["cause_stack"] = _deathmatch_roll_cause_stack(
-                contexts[idx],
-                sex=sexes[idx],
-                age=int(states[idx]["death_age"]),
-                cause_detail_mode=cause_detail_mode,
-            )
+            left_main = _terminal_pad(_terminal_truncate(cells[0], column_width), column_width)
+            right_main = _terminal_pad(_terminal_truncate(cells[1], column_width), column_width)
+            print(f"{left_main} │ {right_main}", flush=True)
 
-        age += 1
-        if args.delay > 0 and not all(bool(st.get("dead")) for st in states):
-            time.sleep(args.delay)
+            if source_cells[0] or source_cells[1]:
+                left_source = _terminal_pad(
+                    _terminal_truncate(source_cells[0], column_width), column_width
+                )
+                right_source = _terminal_pad(
+                    _terminal_truncate(source_cells[1], column_width), column_width
+                )
+                print(f"{left_source} │ {right_source}", flush=True)
+
+            if newly_dead:
+                print(
+                    _deathmatch_live_tapout_row(
+                        newly_dead,
+                        countries=countries, provinces=provinces,
+                        player_numbers=player_numbers, states=states, sexes=sexes,
+                        column_width=column_width, blink=True,
+                    ),
+                    flush=True,
+                )
+            for idx in newly_dead:
+                states[idx]["cause_stack"] = _deathmatch_roll_cause_stack(
+                    contexts[idx],
+                    sex=sexes[idx],
+                    age=int(states[idx]["death_age"]),
+                    cause_detail_mode=cause_detail_mode,
+                    calendar_year=int(states[idx].get("death_year", calendar_year)),
+                )
+
+            calendar_year += 1
+            if args.delay > 0 and not all(bool(st.get("dead")) for st in states):
+                time.sleep(args.delay)
+    else:
+        age = args.start_age
+        while not all(bool(st.get("dead")) for st in states):
+            cells: list[str] = []
+            newly_dead: list[int] = []
+            for idx, (ctx, state) in enumerate(zip(contexts, states)):
+                mortality_roll = mortality_rngs[idx].random()
+                was_dead = bool(state.get("dead"))
+                cell = _deathmatch_cell(
+                    ctx,
+                    state,
+                    age=age,
+                    sex=sexes[idx],
+                    exceptional_tail=args.exceptional_tail,
+                    mortality_roll=mortality_roll,
+                )
+                cells.append(cell)
+                if not was_dead and state.get("dead"):
+                    newly_dead.append(idx)
+
+            if historical_deathmatch:
+                rendered: list[str] = []
+                for idx, cell in enumerate(cells):
+                    if birth_years[idx] is None:
+                        prefix = f"age {age:3d}->{age + 1:3d} | "
+                    else:
+                        year = int(birth_years[idx]) + age
+                        prefix = f"age {age:3d}->{age + 1:3d} | year {year} | "
+                    rendered.append(prefix + cell)
+                left, right = rendered
+            else:
+                age_prefix = f"age {age:3d}->{age + 1:3d} | "
+                left = age_prefix + cells[0]
+                right = age_prefix + cells[1]
+            print(f"{_terminal_pad(left, column_width)} │ {right}", flush=True)
+
+            if newly_dead:
+                print(
+                    _deathmatch_live_tapout_row(
+                        newly_dead,
+                        countries=countries,
+                        provinces=provinces,
+                        player_numbers=player_numbers,
+                        states=states,
+                        sexes=sexes,
+                        column_width=column_width,
+                        blink=True,
+                    ),
+                    flush=True,
+                )
+
+            for idx in newly_dead:
+                death_year = (
+                    int(birth_years[idx]) + int(states[idx]["death_age"])
+                    if birth_years[idx] is not None else None
+                )
+                states[idx]["cause_stack"] = _deathmatch_roll_cause_stack(
+                    contexts[idx],
+                    sex=sexes[idx],
+                    age=int(states[idx]["death_age"]),
+                    cause_detail_mode=cause_detail_mode,
+                    calendar_year=death_year,
+                )
+
+            age += 1
+            if args.delay > 0 and not all(bool(st.get("dead")) for st in states):
+                time.sleep(args.delay)
 
     # Both eventual death cards are printed regardless of win mode. This
     # preserves the full underlying mechanics and gives both players complete
@@ -10579,7 +10945,12 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
         )
 
     ages = [int(st["death_age"]) for st in states]
-    winner_idx, result_age = _deathmatch_result(ages, args.deathmatch_win)
+    calendar_result = timeline_mode == "calendar" and all(year is not None for year in birth_years)
+    if calendar_result:
+        result_values = [int(st["death_year"]) for st in states]
+    else:
+        result_values = ages
+    winner_idx, result_value = _deathmatch_result(result_values, args.deathmatch_win)
     print()
     result_heading = "DEATHMATCH RESULT"
     print(result_heading)
@@ -10588,11 +10959,15 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
         contexts, states, countries=countries, provinces=provinces,
         player_numbers=player_numbers, sexes=sexes, start_age=args.start_age,
         winner_idx=winner_idx, win_mode=args.deathmatch_win,
+        timeline_mode=("calendar" if calendar_result else "independent"),
     )
 
     print()
     if winner_idx is None:
-        result_banner = f"*** 🤝 DEATHMATCH DRAW AT AGE {result_age} ***"
+        if calendar_result:
+            result_banner = f"*** 🤝 DEATHMATCH DRAW — BOTH DIED IN {result_value} ***"
+        else:
+            result_banner = f"*** 🤝 DEATHMATCH DRAW AT AGE {result_value} ***"
     else:
         winner_country = countries[winner_idx]
         winner_label = deathmatch_contestant_label(
@@ -10601,15 +10976,28 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
             province=provinces[winner_idx],
             player_number=player_numbers[winner_idx],
         )
-        if args.deathmatch_win == "long":
+        if calendar_result:
+            winner_age = ages[winner_idx]
+            winner_year = int(states[winner_idx]["death_year"])
+            if args.deathmatch_win == "long":
+                result_banner = (
+                    f"*** {winner_label} WINS DEATHMATCH — LAST ALIVE; "
+                    f"DIED IN {winner_year} AT AGE {winner_age} ***"
+                )
+            else:
+                result_banner = (
+                    f"*** {winner_label} WINS DEATHMATCH — DIED FIRST; "
+                    f"DIED IN {winner_year} AT AGE {winner_age} ***"
+                )
+        elif args.deathmatch_win == "long":
             result_banner = (
                 f"*** {winner_label} WINS DEATHMATCH — OUTLIVED OPPONENT; "
-                f"TAPPED OUT AT AGE {result_age} ***"
+                f"TAPPED OUT AT AGE {result_value} ***"
             )
         else:
             result_banner = (
                 f"*** {winner_label} WINS DEATHMATCH — TAPPED OUT FIRST "
-                f"AT AGE {result_age} ***"
+                f"AT AGE {result_value} ***"
             )
     print(_terminal_emphasis(result_banner, bold=True))
 
@@ -10654,8 +11042,8 @@ def parse_args() -> argparse.Namespace:
         metavar="SPEC",
         help=(
             "repeat exactly twice for independently configured Deathmatch contestants; "
-            "format COUNTRY[:PROVINCE]:SEX, e.g. --player ca:on:m --player fi:f. "
-            "SEX is m/f/r; Canadian province is optional and omitted means national Canada"
+            "format COUNTRY[:PROVINCE]:SEX[:BIRTH_YEAR], e.g. --player ca:on:m:1962 --player fi:f:1947. "
+            "SEX is m/f/r; Canadian province and birth year are optional"
         ),
     )
     p.add_argument(
@@ -10727,16 +11115,37 @@ def parse_args() -> argparse.Namespace:
         "--birth-year",
         type=int,
         help=(
-            "simulate a birth cohort using calendar-year mortality at each age; "
-            "omit for the original present-day synthetic mode"
+            "simulate a birth cohort using calendar-year mortality at each age; in Deathmatch, "
+            "one --birth-year applies the same year to both contestants; omit for present-day mode"
+        ),
+    )
+    p.add_argument(
+        "--birth-years",
+        type=int,
+        nargs="+",
+        metavar="YEAR",
+        help=(
+            "Deathmatch convenience override: one YEAR applies to both contestants; "
+            "two YEAR values map PLAYER 1 / PLAYER 2. Overrides birth years embedded in --player."
+        ),
+    )
+    p.add_argument(
+        "--deathmatch-timeline",
+        choices=("auto", "calendar", "independent"),
+        default="auto",
+        help=(
+            "Deathmatch timeline when birth years are used: auto=shared calendar when both birth years "
+            "are known, otherwise independent; calendar=later-born player waits to be born; "
+            "independent=both players start at age 0 on their own calendar timelines"
         ),
     )
     p.add_argument(
         "--hmd-dir",
         type=Path,
         help=(
-            "directory containing HMD Finland mltper_1x1.txt / fltper_1x1.txt; "
-            "needed for cohort years before 1986"
+            "optional HMD source: directory containing country ZIPs (FIN.zip/CAN.zip), "
+            "an extracted HMD country tree, or a direct country ZIP path; defaults to "
+            "local-data/hmd/ when present"
         ),
     )
     p.add_argument(
@@ -11003,6 +11412,7 @@ def main() -> int:
     args.player_mode = bool(args.player)
     args.player_specs = []
     args.player_selections = []
+    args.player_birth_years = []
     if args.player:
         if len(args.player) != 2:
             print("--player must be supplied exactly twice", file=sys.stderr)
@@ -11022,6 +11432,7 @@ def main() -> int:
         args.deathmatch = [spec.country for spec in specs]
         args.deathmatch_provinces = [spec.province for spec in specs]
         args.player_selections = [spec.sex_selection for spec in specs]
+        args.player_birth_years = [spec.birth_year for spec in specs]
     elif args.deathmatch:
         raw_deathmatch = list(args.deathmatch)
         if len(raw_deathmatch) == 1:
@@ -11032,6 +11443,43 @@ def main() -> int:
         else:
             print("--deathmatch accepts one or two country codes", file=sys.stderr)
             return 2
+
+    # Resolve Deathmatch birth years after both --player and legacy --deathmatch
+    # have been normalized. Explicit match-level flags override embedded player years.
+    if args.deathmatch:
+        birth_years = list(args.player_birth_years) if args.player_mode else [None, None]
+        if args.birth_year is not None:
+            birth_years = [int(args.birth_year), int(args.birth_year)]
+        if args.birth_years is not None:
+            if len(args.birth_years) == 1:
+                birth_years = [int(args.birth_years[0]), int(args.birth_years[0])]
+            elif len(args.birth_years) == 2:
+                birth_years = [int(args.birth_years[0]), int(args.birth_years[1])]
+            else:
+                print("--birth-years accepts one or two years", file=sys.stderr)
+                return 2
+        if any(year is not None and int(year) < 1 for year in birth_years):
+            print("--birth-year/--birth-years values must be >= 1", file=sys.stderr)
+            return 2
+        args.deathmatch_birth_years = birth_years
+        if args.deathmatch_timeline == "calendar" and any(year is None for year in birth_years):
+            print("--deathmatch-timeline calendar requires birth years for both contestants", file=sys.stderr)
+            return 2
+        if args.deathmatch_timeline == "auto":
+            args.deathmatch_timeline_resolved = (
+                "calendar" if all(year is not None for year in birth_years) else "independent"
+            )
+        else:
+            args.deathmatch_timeline_resolved = args.deathmatch_timeline
+    else:
+        if args.birth_years is not None:
+            print("--birth-years requires Deathmatch (--deathmatch or two --player arguments)", file=sys.stderr)
+            return 2
+        if args.deathmatch_timeline != "auto":
+            print("--deathmatch-timeline requires Deathmatch", file=sys.stderr)
+            return 2
+        args.deathmatch_birth_years = []
+        args.deathmatch_timeline_resolved = "independent"
 
     ACTIVE_COUNTRY = (args.deathmatch[0] if args.deathmatch else ("ca" if args.canada else (args.country or "fi")))
     ACTIVE_MORTALITY_MODEL = DEFAULT_MORTALITY_MODEL
@@ -11075,9 +11523,13 @@ def main() -> int:
     ACTIVE_MORTALITY_MODEL = resolve_requested_mortality_model(args)
     ACTIVE_LEGACY_MORTALITY = ACTIVE_MORTALITY_MODEL == "legacy"
 
-    if args.birth_year is not None and ACTIVE_MORTALITY_MODEL != "official":
+    historical_requested = (
+        args.birth_year is not None
+        or any(year is not None for year in getattr(args, "deathmatch_birth_years", []))
+    )
+    if historical_requested and ACTIVE_MORTALITY_MODEL != "official":
         print(
-            "argument error: --birth-year uses literal calendar-year mortality and supports only --mortality-model official",
+            "argument error: birth-cohort/calendar-year mortality supports only --mortality-model official",
             file=sys.stderr,
         )
         return 2
@@ -11127,8 +11579,8 @@ def main() -> int:
         print("argument error: non-default --cause-hazard-weight-model requires --alcohol-model cause-hazard-prototype", file=sys.stderr)
         return 2
     if ACTIVE_ALCOHOL_MODEL == "cause-hazard-prototype":
-        if args.birth_year is not None:
-            print("argument error: cause-hazard-prototype currently supports present-day period mode only (no --birth-year)", file=sys.stderr)
+        if historical_requested:
+            print("argument error: cause-hazard-prototype currently supports present-day period mode only (no birth-cohort timeline)", file=sys.stderr)
             return 2
         if ACTIVE_COUNTRY not in {"fi", "ca"}:
             print("argument error: cause-hazard-prototype currently supports Finland and Canada only", file=sys.stderr)
@@ -11209,11 +11661,9 @@ def main() -> int:
     if args.printout and args.log is not None:
         print("--printout is not supported with --log", file=sys.stderr)
         return 2
-    if args.birth_year is not None:
-        minimum = STATCAN_LIFE_TABLE_FIRST_YEAR if ACTIVE_COUNTRY == "ca" else HMD_FINLAND_FIRST_YEAR
-        if args.birth_year < minimum:
-            print(f"--birth-year must be >= {minimum} for {'Canadian' if ACTIVE_COUNTRY == 'ca' else 'Finnish'} cohort mode", file=sys.stderr)
-            return 2
+    if args.birth_year is not None and args.birth_year < 1:
+        print("--birth-year must be >= 1", file=sys.stderr)
+        return 2
     if args.top_causes <= 0:
         print("--top-causes must be > 0", file=sys.stderr)
         return 2
@@ -11286,15 +11736,27 @@ def main() -> int:
             print(f"Canadian life-table data error: {exc}", file=sys.stderr)
             return 2
         if args.birth_year is not None:
-            cohort_source = ACTIVE_PERIOD_SOURCE
-            first_year = args.birth_year + args.start_age
-            if first_year < cohort_source.min_year:
-                print(f"cohort-data error: Canadian life-table data begin in {cohort_source.min_year}; simulation begins in {first_year}", file=sys.stderr)
+            try:
+                cohort_source = prepare_canada_cohort_source(
+                    birth_year=args.birth_year, start_age=args.start_age, selection=selection,
+                    hmd_dir=args.hmd_dir, statcan_source=ACTIVE_PERIOD_SOURCE,
+                    province=args.ca_province_active,
+                )
+            except CohortDataError as exc:
+                print(f"cohort-data error: {exc}", file=sys.stderr)
                 return 2
     elif args.birth_year is not None:
         data_status("Finland cohort mode: loading age/year mortality probabilities...", level=1)
         try:
-            statfin_cache = args.statfin_cache or (DEFAULT_STATFIN_CACHE if args.refresh_statfin else BUNDLED_STATFIN_LIFE_TABLE)
+            first_calendar_year = args.birth_year + args.start_age
+            if args.statfin_cache is not None:
+                statfin_cache = args.statfin_cache
+            elif args.refresh_statfin or first_calendar_year < BUNDLED_STATFIN_SNAPSHOT_YEAR:
+                # Historical StatFin 12ap (1986+) is an open on-demand/cache source;
+                # the bundled file is intentionally only the current 2024 snapshot.
+                statfin_cache = DEFAULT_STATFIN_CACHE
+            else:
+                statfin_cache = BUNDLED_STATFIN_LIFE_TABLE
             cohort_source = prepare_cohort_source(
                 birth_year=args.birth_year, start_age=args.start_age, selection=selection,
                 hmd_dir=args.hmd_dir, statfin_cache=statfin_cache, refresh_statfin=args.refresh_statfin,
