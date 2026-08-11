@@ -133,7 +133,13 @@ Present-day model selection does not remove any existing data plumbing: bundled 
 
 Mortality Roulette can read **Human Mortality Database (HMD)** 1x1 period life tables directly from locally downloaded country ZIPs. HMD is optional: the normal present-day game does not need it. For **national historical birth-cohort runs**, an installed HMD archive is preferred automatically for its long historical coverage. If a bundled canonical national source contains a newer observed year than the installed HMD archive, Mortality Roulette appends that newer observed year rather than discarding it or silently treating an older HMD year as current. If HMD is not installed, Canada falls back to its bundled Statistics Canada history and Finland can use the open Statistics Finland 12ap history (cached/downloaded on demand for pre-2024 cohort years). Province-specific Canadian runs continue to use province-specific Statistics Canada mortality rather than substituting national HMD data.
 
-After registering/logging in at the HMD website, download the desired country archive and place it under the Git-ignored local data directory:
+After registering/logging in at the [Human Mortality Database](https://www.mortality.org/), download the desired country archive from the relevant HMD country page:
+
+- [Finland (FIN)](https://www.mortality.org/Country/Country?cntr=FIN)
+- [Canada (CAN)](https://www.mortality.org/Country/Country?cntr=CAN)
+- [United States (USA)](https://www.mortality.org/Country/Country?cntr=USA)
+
+Place the downloaded archive under the Git-ignored local data directory:
 
 ```text
 local-data/hmd/FIN.zip
