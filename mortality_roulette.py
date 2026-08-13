@@ -108,6 +108,9 @@ from mortality_roulette_core.hmd import (
 )
 from mortality_roulette_core.external_contexts import ExternalContextModel
 from mortality_roulette_core.places import PlaceModel
+from mortality_roulette_core.pathways import PostmortemContextModel, PostmortemPathwayModel
+from mortality_roulette_core.postmortem_summary import compose_realized_postmortem
+from mortality_roulette_core.icd_knowledge import IcdKnowledgeBase, format_icd_code as _kb_format_icd, normalize_icd_code as _kb_norm_icd
 from mortality_roulette_core.suicide_reasons import SuicideReasonModel
 
 from mortality_roulette_core.terminal import (
@@ -119,7 +122,7 @@ from mortality_roulette_core.terminal import (
     terminal_wrap as _terminal_wrap,
 )
 
-VERSION = "0.13.9"
+VERSION = "0.13.13"
 __version__ = VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -134,14 +137,20 @@ BUNDLED_STATCAN_LIFE_TABLE_BC = DATASETS_ROOT / "canada" / "mortality" / "statca
 BUNDLED_STATCAN_SEASONAL = DATASETS_ROOT / "canada" / "seasonality" / "statcan_13100708_2024.json"
 BUNDLED_STATCAN_SEASONAL_BC = DATASETS_ROOT / "canada" / "seasonality" / "statcan_13100708_2024_bc.json"
 BUNDLED_WHO_ICD_TITLES = DATASETS_ROOT / "who" / "icd10" / "who_icd10_titles_2019.json"
+BUNDLED_ICD_ANNOTATIONS = DATASETS_ROOT / "who" / "icd10" / "icd10_annotations_v1.json"
 BUNDLED_SUICIDE_REASON_MODEL = DATASETS_ROOT / "suicide" / "suicide_reason_model_v1.json"
 BUNDLED_EXTERNAL_CONTEXT_MODEL = DATASETS_ROOT / "external_causes" / "conditional_context_model_v1.json"
 BUNDLED_PLACE_MODEL = DATASETS_ROOT / "places" / "cause_place_model_v1.json"
 BUNDLED_CAUSE_NOTE_MODEL = DATASETS_ROOT / "cause_notes" / "cause_note_model_v1.json"
+BUNDLED_POSTMORTEM_MODEL = DATASETS_ROOT / "pathways" / "ca_postmortem_pathway_model_v1.json"
+BUNDLED_FI_POSTMORTEM_CONTEXT = DATASETS_ROOT / "pathways" / "fi_postmortem_context_v1.json"
 SUICIDE_REASON_MODEL = SuicideReasonModel.from_path(BUNDLED_SUICIDE_REASON_MODEL)
 EXTERNAL_CONTEXT_MODEL = ExternalContextModel.from_path(BUNDLED_EXTERNAL_CONTEXT_MODEL)
 PLACE_MODEL = PlaceModel.from_path(BUNDLED_PLACE_MODEL)
 CAUSE_NOTE_MODEL = CauseNoteModel.from_path(BUNDLED_CAUSE_NOTE_MODEL)
+POSTMORTEM_MODEL = PostmortemPathwayModel.from_path(BUNDLED_POSTMORTEM_MODEL)
+FI_POSTMORTEM_CONTEXT_MODEL = PostmortemContextModel.from_path(BUNDLED_FI_POSTMORTEM_CONTEXT)
+ICD_KNOWLEDGE = IcdKnowledgeBase.from_paths(BUNDLED_WHO_ICD_TITLES, BUNDLED_ICD_ANNOTATIONS)
 
 MALE_BIRTH_SHARE = 0.512
 TAIL_CAP = 0.50
@@ -3137,14 +3146,8 @@ def cause_hazard_weight_model_label() -> str:
 
 
 def _is_direct_alcohol_icd(code: str) -> bool:
-    norm = _normalise_who_icd_code(code)
-    if not norm:
-        return False
-    if norm == "X45":
-        return True
-    if norm.startswith("F10") or norm.startswith("K70"):
-        return True
-    return norm in {"G312", "G4051", "G621", "G721", "I426", "K292", "K852", "K860"}
+    """Return explicit alcohol attribution from the code-indexed ICD knowledge layer."""
+    return ICD_KNOWLEDGE.has_tag(code, "direct_alcohol_attribution")
 
 
 def _boozehound_icd_hazard_effective_rr(
@@ -6560,6 +6563,645 @@ def print_cause_note(outcome: dict[str, object] | None) -> None:
         print(f"note: {text}")
 
 
+def print_postmortem_pathway(
+    outcome: dict[str, object] | None,
+    *,
+    country: str | None = None,
+    player_number: int | None = None,
+    leading_blank: bool = True,
+) -> None:
+    """Render a country-specific modeled lead-up without promoting inference to fact."""
+    if not isinstance(outcome, dict) or not outcome.get("available"):
+        return
+
+    country_code = str(country or ACTIVE_COUNTRY).strip().lower()
+    presentation = str(outcome.get("presentation", "")).strip()
+
+    if presentation == "generic-factual-postmortem":
+        flag = "🇫🇮" if country_code == "fi" else ("🇨🇦" if country_code == "ca" else country_flag())
+        doctor = str(outcome.get("doctor", "🧑‍⚕️"))
+        subject = f"PLAYER {int(player_number)}" if player_number is not None else "THIS PLAYER"
+        heading = f"{flag} {doctor} WHAT HAPPENED TO {subject}?"
+        terminal_columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+        box_width = max(58, min(104, terminal_columns - 2))
+        inner = box_width - 4
+
+        def generic_line(text: str = "") -> None:
+            print(f"│ {_terminal_pad(_terminal_truncate(text, inner), inner)} │")
+
+        def generic_wrapped(text: str) -> None:
+            for line in _terminal_wrap(text, inner):
+                generic_line(line)
+
+        def divider() -> None:
+            print("├" + "─" * (box_width - 2) + "┤")
+
+        if leading_blank:
+            print()
+        print("┌" + "─" * (box_width - 2) + "┐")
+        generic_line(heading)
+        divider()
+
+        factual = outcome.get("factual") if isinstance(outcome.get("factual"), dict) else {}
+        factual_lines = list(factual.get("lines", [])) if isinstance(factual, dict) else []
+        for index, text in enumerate(factual_lines):
+            if index:
+                generic_line()
+            generic_wrapped(str(text))
+
+        icd = factual.get("icd") if isinstance(factual, dict) and isinstance(factual.get("icd"), dict) else None
+        plain = str(factual.get("plain_language", "")).strip() if isinstance(factual, dict) else ""
+        condition_state = dict(factual.get("condition_state", {})) if isinstance(factual, dict) else {}
+        if plain or condition_state:
+            divider()
+            generic_line("ICD CONTEXT")
+            code = str(factual.get("code", "")).strip() if isinstance(factual, dict) else ""
+            title = str(icd.get("title", "")).strip() if isinstance(icd, dict) else ""
+            if code:
+                generic_wrapped(f"CODE: {code}" + (f" — {title}" if title else ""))
+            if plain:
+                generic_wrapped(f"MEANING: {plain}")
+            if condition_state.get("dementia") == "present":
+                generic_line("DEMENTIA       : YES")
+                generic_wrapped("BASIS          : realized ICD cause/detail code")
+            if condition_state.get("alzheimer") == "present":
+                generic_line("ALZHEIMER      : YES")
+                generic_wrapped("BASIS          : realized ICD cause/detail code")
+
+        enrichments = [x for x in outcome.get("enrichments", []) if isinstance(x, dict)]
+        for enrichment in enrichments:
+            ep = str(enrichment.get("presentation", "")).strip()
+            divider()
+            if ep == "fi-dementia-prevalence-context":
+                generic_line("DEMENTIA BENCHMARKS")
+                prevalence = float(enrichment.get("prevalence", 0.0))
+                sex_label = "M" if str(enrichment.get("sex", "male")) == "male" else "F"
+                age_band = str(enrichment.get("age_band", ""))
+                generic_line(f"EUROPE {age_band} {sex_label:<2}: {prevalence * 100:.1f}%")
+                for benchmark in enrichment.get("additional_benchmarks", []):
+                    if not isinstance(benchmark, dict):
+                        continue
+                    label = str(benchmark.get("label", "benchmark")).strip()
+                    display = str(benchmark.get("display", "")).strip()
+                    generic_wrapped(f"{label:<14}: {display}" if display else label)
+                generic_wrapped("STATUS         : population benchmarks only — not a Mortality Roulette modeled probability")
+                generic_wrapped("The benchmark percentages are not averaged together; they describe different populations and study designs.")
+                generic_wrapped(f"model: {enrichment.get('model_id', 'unknown')}")
+            elif ep == "alcohol-model-context":
+                generic_line("ALCOHOL-CODE / HAZARD CONTEXT")
+                if enrichment.get("direct_alcohol_code"):
+                    generic_line("DIRECT ALCOHOL ATTRIBUTION : YES")
+                    generic_wrapped("Alcohol attribution is part of the realized ICD classification itself.")
+                else:
+                    generic_line("DIRECT ALCOHOL ATTRIBUTION : NO")
+                    generic_wrapped("The separate alcohol model contains evidence-backed hazard context for this code; this does not make the ICD diagnosis itself alcohol-attributed.")
+                generic_wrapped(
+                    f"EXPOSURE: {float(enrichment.get('exposure_years', 0.0)):.1f} years at "
+                    f"{float(enrichment.get('grams_per_day', 0.0)):.1f} g ethanol/day"
+                )
+                generic_wrapped(
+                    f"ICD CAUSE WEIGHT: ×{float(enrichment.get('modifier', 1.0)):.2f} "
+                    f"(target ×{float(enrichment.get('target_modifier', 1.0)):.2f}; profile={enrichment.get('profile', 'chronic')})"
+                )
+                basis = str(enrichment.get("basis", "")).strip()
+                if basis:
+                    generic_wrapped(f"basis: {basis}")
+                generic_wrapped("This section does not invent hospitalization, complications, treatment, fault, or an intermediate medical sequence.")
+            else:
+                generic_line("ADDITIONAL COUNTRY-SPECIFIC EVIDENCE")
+                generic_wrapped("MODELED POPULATION-LEVEL CONTEXT — NOT AN OBSERVED INDIVIDUAL HISTORY")
+                kind = str(enrichment.get("kind", "evidence_summary"))
+                if kind == "two_stage_weighted":
+                    for stage in enrichment.get("stages", []):
+                        if isinstance(stage, dict):
+                            generic_wrapped(
+                                f"• {stage.get('label', 'unresolved')} [source marginal {float(stage.get('probability', 0.0)) * 100:.1f}%]"
+                            )
+                elif kind == "marginal_associations":
+                    associations = [x for x in enrichment.get("associations", []) if isinstance(x, dict)]
+                    if associations:
+                        for item in associations:
+                            generic_wrapped(
+                                f"• {item.get('label', 'unresolved')} [source marginal {float(item.get('probability', 0.0)) * 100:.1f}%]"
+                            )
+                    else:
+                        generic_wrapped(str(enrichment.get("summary", "No listed associated condition was selected.")))
+                else:
+                    steps = [str(x) for x in enrichment.get("steps", []) if str(x).strip()]
+                    if steps:
+                        for step in steps:
+                            generic_wrapped(f"• {step}")
+                    else:
+                        generic_wrapped(str(enrichment.get("summary", "Modeled evidence summary")))
+                generic_wrapped(f"model: {enrichment.get('model_id', 'unknown')}")
+                limitations = str(enrichment.get("limitations", "")).strip()
+                if limitations:
+                    generic_wrapped(f"limits: {limitations}")
+
+        footer = str(outcome.get("country_footer", "")).strip()
+        if footer:
+            divider()
+            generic_wrapped(footer)
+        print("└" + "─" * (box_width - 2) + "┘")
+        return
+
+    if presentation == "alcohol-model-context":
+        flag = "🇫🇮" if country_code == "fi" else ("🇨🇦" if country_code == "ca" else country_flag())
+        doctor = str(outcome.get("doctor", "🧑‍⚕️"))
+        subject = f"PLAYER {int(player_number)}" if player_number is not None else "THIS PLAYER"
+        heading = f"{flag} {doctor} WHAT CAN WE SAY ABOUT {subject}?"
+        terminal_columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+        box_width = max(58, min(96, terminal_columns - 2))
+        inner = box_width - 4
+
+        def alcohol_line(text: str = "") -> None:
+            print(f"│ {_terminal_pad(_terminal_truncate(text, inner), inner)} │")
+
+        def alcohol_wrapped(text: str) -> None:
+            for line in _terminal_wrap(text, inner):
+                alcohol_line(line)
+
+        if leading_blank:
+            print()
+        print("┌" + "─" * (box_width - 2) + "┐")
+        alcohol_line(heading)
+        print("├" + "─" * (box_width - 2) + "┤")
+
+        code = str(outcome.get("code", "")).strip()
+        label = str(outcome.get("cause_label", "realized cause")).strip()
+        if code and not _normalise_who_icd_code(label).startswith(_normalise_who_icd_code(code)):
+            realized = f"{code} {label}"
+        else:
+            realized = label
+        alcohol_wrapped(f"The realized cause detail was {realized}.")
+        alcohol_line()
+        if outcome.get("direct_alcohol_code"):
+            alcohol_wrapped("This ICD outcome is explicitly alcohol-related.")
+        else:
+            alcohol_wrapped("The active boozehound cause-hazard model treated this realized ICD outcome as alcohol-sensitive.")
+        alcohol_line()
+        alcohol_wrapped(
+            f"EXPOSURE: {float(outcome.get('exposure_years', 0.0)):.1f} years at "
+            f"{float(outcome.get('grams_per_day', 0.0)):.1f} g ethanol/day"
+        )
+        alcohol_wrapped(
+            f"ICD CAUSE WEIGHT: ×{float(outcome.get('modifier', 1.0)):.2f} "
+            f"(target ×{float(outcome.get('target_modifier', 1.0)):.2f}; profile={outcome.get('profile', 'chronic')})"
+        )
+        baseline_p = outcome.get("baseline_conditional_probability")
+        selected_p = outcome.get("conditional_probability")
+        if baseline_p is not None and selected_p is not None:
+            alcohol_wrapped(
+                f"WITHIN-PARENT SHARE: {float(baseline_p) * 100:.2f}% baseline → "
+                f"{float(selected_p) * 100:.2f}% after alcohol-model reweighting"
+            )
+        alcohol_line()
+        alcohol_wrapped("ALCOHOL-MODEL CONTEXT — NOT AN OBSERVED MEDICAL HISTORY")
+        if outcome.get("direct_alcohol_code"):
+            alcohol_wrapped(
+                "The cause label and active model both support an alcohol-related interpretation of this rolled outcome, "
+                "but no hospitalization, complication, or treatment sequence was reconstructed."
+            )
+        else:
+            alcohol_wrapped(
+                "This is a conditional model reweighting, not proof that alcohol caused this individual death and not a "
+                "reconstruction of hospitalization, complications, or treatment."
+            )
+        print("├" + "─" * (box_width - 2) + "┤")
+        alcohol_wrapped(f"model: {outcome.get('model_id', 'unknown')}")
+        basis = str(outcome.get("basis", "")).strip()
+        if basis:
+            alcohol_wrapped(f"basis: {basis}")
+        print("└" + "─" * (box_width - 2) + "┘")
+        return
+
+    if country_code == "fi" and presentation == "fi-dementia-prevalence-context":
+        flag = "🇫🇮"
+        doctor = str(outcome.get("doctor", "🧑‍⚕️"))
+        subject = f"PLAYER {int(player_number)}" if player_number is not None else "THIS PLAYER"
+        heading = f"{flag} {doctor} WHAT CAN WE SAY ABOUT {subject}?"
+        terminal_columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+        box_width = max(58, min(96, terminal_columns - 2))
+        inner = box_width - 4
+
+        def fi_context_line(text: str = "") -> None:
+            print(f"│ {_terminal_pad(_terminal_truncate(text, inner), inner)} │")
+
+        def fi_context_wrapped(text: str) -> None:
+            for line in _terminal_wrap(text, inner):
+                fi_context_line(line)
+
+        prevalence = float(outcome.get("prevalence", 0.0))
+        odds_n = (1.0 / prevalence) if prevalence > 0.0 else float("inf")
+        odds_text = f"about 1 in {odds_n:.1f}" if odds_n < 20 else f"about 1 in {odds_n:.0f}"
+        sex_label = "men" if str(outcome.get("sex", "male")) == "male" else "women"
+        age_band = str(outcome.get("age_band", "this age group"))
+
+        if leading_blank:
+            print()
+        print("┌" + "─" * (box_width - 2) + "┐")
+        fi_context_line(heading)
+        print("├" + "─" * (box_width - 2) + "┤")
+        fi_context_wrapped("We do not have enough Finland-specific public evidence to reconstruct a defensible medical lead-up for this death.")
+        fi_context_line()
+        fi_context_wrapped("However, there is relevant age- and sex-specific population context:")
+        fi_context_line()
+        fi_context_wrapped(
+            f"Alzheimer Europe 2025 estimates dementia prevalence among {sex_label} age {age_band} at "
+            f"{prevalence * 100:.1f}% — {odds_text}."
+        )
+        fi_context_line()
+        fi_context_wrapped("BACKGROUND PREVALENCE — NOT A DIAGNOSIS")
+        fi_context_wrapped("This does not mean the simulated player had dementia, and it is not a cause-of-death pathway probability.")
+        print("├" + "─" * (box_width - 2) + "┤")
+        fi_context_wrapped(f"model: {outcome.get('model_id', 'unknown')}")
+        basis = str(outcome.get("basis", "")).strip()
+        if basis:
+            fi_context_wrapped(f"basis: {basis}")
+        provenance = list(outcome.get("provenance", []))
+        if provenance:
+            labels = []
+            for item in provenance:
+                agency = str(item.get("agency", "")).strip()
+                source = str(item.get("source", "")).strip()
+                labels.append(" — ".join(x for x in (agency, source) if x))
+            labels = [x for x in labels if x]
+            if labels:
+                fi_context_wrapped("source: " + "; ".join(labels))
+        print("└" + "─" * (box_width - 2) + "┘")
+        return
+
+    if country_code == "fi" and presentation == "fi-public-data-fallback":
+        flag = "🇫🇮"
+        subject = f"PLAYER {int(player_number)}" if player_number is not None else "THIS PLAYER"
+        heading = f"{flag} 👨‍💼 WHAT HAPPENED TO {subject}?"
+
+        terminal_columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+        box_width = max(58, min(96, terminal_columns - 2))
+        inner = box_width - 4
+
+        def fi_box_line(text: str = "") -> None:
+            print(f"│ {_terminal_pad(_terminal_truncate(text, inner), inner)} │")
+
+        def fi_box_wrapped(text: str) -> None:
+            for line in _terminal_wrap(text, inner):
+                fi_box_line(line)
+
+        if leading_blank:
+            print()
+        print("┌" + "─" * (box_width - 2) + "┐")
+        fi_box_line(heading)
+        print("├" + "─" * (box_width - 2) + "┤")
+        fi_box_line("LOOK. PEOPLE DIE.")
+        fi_box_line("PEOPLE DIE ALL THE TIME, OKAY?")
+        fi_box_line("BUT WHO CARES?")
+        fi_box_line()
+        fi_box_line("DIED IN A HOSPITAL,")
+        fi_box_line("DIED IN A NURSING HOME.")
+        fi_box_line("THEY DIED!")
+        fi_box_line()
+        fi_box_line("💸")
+        print("├" + "─" * (box_width - 2) + "┤")
+        fi_box_wrapped("POSTMORTEM MODEL: NOT AVAILABLE FOR FINLAND")
+        fi_box_wrapped("No Finland-specific modeled lead-up was applied.")
+        fi_box_wrapped("The realized cause-of-death result above is unchanged.")
+        print("└" + "─" * (box_width - 2) + "┘")
+        return
+
+    doctor = str(outcome.get("doctor", "🧑‍⚕️"))
+    flag = "🇨🇦" if country_code == "ca" else country_flag()
+    subject = f"PLAYER {int(player_number)}" if player_number is not None else "THIS PLAYER"
+    heading = f"{flag} {doctor} WHAT LIKELY HAPPENED TO {subject}?"
+
+    terminal_columns = shutil.get_terminal_size(fallback=(100, 24)).columns
+    box_width = max(58, min(96, terminal_columns - 2))
+    inner = box_width - 4
+
+    def box_line(text: str = "") -> None:
+        print(f"│ {_terminal_pad(_terminal_truncate(text, inner), inner)} │")
+
+    def box_wrapped(text: str) -> None:
+        for line in _terminal_wrap(text, inner):
+            box_line(line)
+
+    if leading_blank:
+        print()
+    print("┌" + "─" * (box_width - 2) + "┐")
+    box_line(heading)
+    print("├" + "─" * (box_width - 2) + "┤")
+
+    if country_code == "ca":
+        if player_number is not None:
+            box_wrapped(
+                f"According to Canadian population statistics, a plausible modeled lead-up or "
+                f"associated context for PLAYER {int(player_number)}'s outcome is:"
+            )
+        else:
+            box_wrapped(
+                "According to Canadian population statistics, a plausible modeled lead-up or "
+                "associated context for this outcome is:"
+            )
+    else:
+        box_wrapped("Population-level modeled postmortem context:")
+
+    box_line()
+    if outcome.get("fallback"):
+        box_wrapped("NO SUPPORTED MODELED LEAD-UP — REALIZED CAUSE LEFT UNCHANGED")
+        box_wrapped(str(outcome.get("summary", "No supported pathway model is available.")))
+    else:
+        box_wrapped("MODELED POPULATION-LEVEL RECONSTRUCTION — NOT AN OBSERVED INDIVIDUAL HISTORY")
+        box_line()
+        kind = str(outcome.get("kind", "evidence_summary"))
+        if kind == "two_stage_weighted":
+            stages = list(outcome.get("stages", []))
+            for index, stage in enumerate(stages):
+                if index:
+                    box_line("  ↓")
+                label = str(stage.get("label", "unresolved"))
+                probability = float(stage.get("probability", 0.0))
+                box_wrapped(f"{label}  [source marginal {probability * 100:.1f}%]")
+        elif kind == "marginal_associations":
+            associations = list(outcome.get("associations", []))
+            if associations:
+                for item in associations:
+                    label = str(item.get("label", "unresolved"))
+                    probability = float(item.get("probability", 0.0))
+                    box_wrapped(f"• {label}  [source marginal {probability * 100:.1f}%]")
+            else:
+                box_wrapped(str(outcome.get("summary", "No listed associated condition was selected.")))
+        else:
+            steps = list(outcome.get("steps", []))
+            if steps:
+                for index, step in enumerate(steps):
+                    if index:
+                        box_line("  ↓")
+                    box_wrapped(str(step))
+            else:
+                box_wrapped(str(outcome.get("summary", "Modeled evidence summary")))
+
+    box_line()
+    box_wrapped(f"model: {outcome.get('model_id', 'unknown')}")
+    basis = str(outcome.get("basis", "")).strip()
+    if basis:
+        box_wrapped(f"basis: {basis}")
+    limitations = str(outcome.get("limitations", "")).strip()
+    if limitations:
+        box_wrapped(f"limits: {limitations}")
+    provenance = list(outcome.get("provenance", []))
+    if provenance:
+        labels = []
+        for item in provenance:
+            agency = str(item.get("agency", "")).strip()
+            source = str(item.get("source", "")).strip()
+            labels.append(" — ".join(x for x in (agency, source) if x))
+        labels = [x for x in labels if x]
+        if labels:
+            box_wrapped("source: " + "; ".join(labels))
+    print("└" + "─" * (box_width - 2) + "┘")
+
+
+def _boozehound_postmortem_context(
+    *,
+    country: str,
+    sex: str,
+    age: int,
+    cause: dict[str, object] | None,
+    detail: dict[str, object] | None,
+    deep: dict[str, object] | None,
+    doctor: str | None = None,
+    rng: random.Random | None = None,
+) -> dict[str, object] | None:
+    """Return alcohol-model context for a realized alcohol-sensitive cause.
+
+    This is not a treatment-pathway reconstruction.  It merely exposes how the
+    already-active boozehound cause-hazard model treated the realized cause
+    stack.  The function consumes no RNG except for narrator selection when a
+    doctor was not already selected by a country pathway model.
+    """
+    if not ACTIVE_BOOZEHOUND or not boozehound_exposure_has_started(age):
+        return None
+
+    selected: dict[str, object] | None = None
+    matched_level = None
+    for level, outcome in (("deep", deep), ("detail", detail), ("cause", cause)):
+        if not isinstance(outcome, dict) or not outcome.get("available"):
+            continue
+        if outcome.get("boozehound_adjusted"):
+            selected = outcome
+            matched_level = level
+            break
+    if selected is None:
+        return None
+
+    modifier = float(selected.get("cause_modifier", 1.0))
+    target = float(selected.get("cause_modifier_target", modifier))
+    label = str(selected.get("label", "realized cause")).strip()
+    code = str(selected.get("code", "")).strip() or (_extract_icd_from_label(label) or "")
+    direct = bool(code and _is_direct_alcohol_icd(code))
+    # Do not turn tiny/no-op prototype weights into narration.  Explicitly
+    # alcohol-coded outcomes are retained even if a future model normalizes
+    # their conditional weight close to 1.0.
+    if not direct and modifier <= 1.02 and target <= 1.02:
+        return None
+
+    evidence_basis = ""
+    profile = str(selected.get("boozehound_profile", "chronic"))
+    if code:
+        try:
+            _eff, _target, profile_calc, _maturity, evidence_basis = _boozehound_icd_hazard_effective_rr(
+                code, age=age, sex=sex, country=str(country).strip().lower()
+            )
+            if profile_calc:
+                profile = profile_calc
+        except Exception:
+            evidence_basis = ""
+
+    # A generic proxy weight is not enough to turn an otherwise ordinary cause
+    # into an alcohol-themed postmortem. Explicit alcohol attribution survives;
+    # non-direct causes need an evidence-backed (non-proxy) basis.
+    if not direct and (not evidence_basis or "proxy-v1" in evidence_basis.casefold()):
+        return None
+
+    if doctor is None:
+        doctors = ("👩‍⚕️", "👨‍⚕️", "🧑‍⚕️")
+        if rng is None:
+            doctor = doctors[2]
+        else:
+            doctor = doctors[int(float(rng.random()) * len(doctors)) % len(doctors)]
+
+    years = float(selected.get("boozehound_exposure_years", boozehound_exposure_years(age)))
+    baseline_p = selected.get("baseline_conditional_probability")
+    selected_p = selected.get("conditional_probability")
+    summary = (
+        f"{label} is explicitly alcohol-related; active cause weight ×{modifier:.2f}."
+        if direct
+        else f"{label} was treated as alcohol-sensitive by the active model; cause weight ×{modifier:.2f}."
+    )
+    return {
+        "available": True,
+        "modeled": False,
+        "contextual": True,
+        "fallback": False,
+        "presentation": "alcohol-model-context",
+        "doctor": doctor,
+        "rule_id": "BOOZEHOUND_REALIZED_CAUSE_CONTEXT",
+        "kind": "alcohol_model_context",
+        "matched_level": matched_level,
+        "model_id": "boozehound-cause-hazard-postmortem-context-v1",
+        "title": "ALCOHOL-MODEL CONTEXT",
+        "summary": summary,
+        "country": str(country).strip().lower(),
+        "cause_label": label,
+        "code": code,
+        "direct_alcohol_code": direct,
+        "profile": profile,
+        "exposure_years": years,
+        "grams_per_day": float(ACTIVE_BOOZEHOUND_GRAMS_PER_DAY),
+        "modifier": modifier,
+        "target_modifier": target,
+        "baseline_conditional_probability": baseline_p,
+        "conditional_probability": selected_p,
+        "basis": evidence_basis or cause_hazard_weight_model_label(),
+        "limitations": (
+            "This is the active alcohol model's conditional reweighting of the realized cause, not proof that alcohol "
+            "caused an individual death and not a reconstruction of hospitalization, complications, or treatment."
+        ),
+        "provenance": [],
+    }
+
+
+def _resolve_postmortem_outcome(
+    *,
+    country: str,
+    sex: str,
+    age: int,
+    rng: random.Random,
+    cause: dict[str, object] | None,
+    detail: dict[str, object] | None,
+    deep: dict[str, object] | None,
+    place: dict[str, object] | None = None,
+    traffic_context: dict[str, object] | None = None,
+    substance_context: dict[str, object] | None = None,
+    suicide_reason: dict[str, object] | None = None,
+    seasonal: dict[str, object] | None = None,
+    region: str | None = None,
+) -> dict[str, object] | None:
+    """Compose one postmortem from realized facts, then optional enrichments.
+
+    The factual summary is country-agnostic and consumes no RNG. Country-specific
+    pathway/context models and the alcohol model may append evidence, but failure
+    to match one of those specialist models never erases the already-realized
+    simulation facts. The Finnish politician is a true final fallback only when
+    even the realized death stack cannot produce meaningful narration.
+    """
+    country_code = str(country).strip().lower()
+    factual = compose_realized_postmortem(
+        country=country_code, region=region, sex=sex, age=age, knowledge=ICD_KNOWLEDGE,
+        cause=cause, detail=detail, deep=deep, place=place,
+        traffic_context=traffic_context, substance_context=substance_context,
+        suicide_reason=suicide_reason, seasonal=seasonal,
+    )
+
+    enrichments: list[dict[str, object]] = []
+    fallback_pathway: dict[str, object] | None = None
+    narrator: str | None = None
+
+    # Country-specific pathway evidence is additive. Canadian unsupported rules
+    # become a footer rather than replacing the entire doctor summary.
+    if POSTMORTEM_MODEL.supports_country(country):
+        primary = POSTMORTEM_MODEL.roll_for_cause_stack(
+            country=country, sex=sex, age=age, rng=rng,
+            cause=cause, detail=detail, deep=deep,
+        )
+        if isinstance(primary, dict):
+            narrator = str(primary.get("doctor", "") or "") or narrator
+            if primary.get("fallback"):
+                fallback_pathway = primary
+            else:
+                enrichments.append(primary)
+
+    # Finnish prevalence/context evidence is also additive and code-gated.
+    if country_code == "fi":
+        fi_context = FI_POSTMORTEM_CONTEXT_MODEL.context_for(
+            country=country, sex=sex, age=age, rng=rng,
+            cause=cause, detail=detail, deep=deep,
+        )
+        if fi_context is not None:
+            narrator = narrator or str(fi_context.get("doctor", "") or "")
+            enrichments.append(fi_context)
+
+    # Alcohol context is useful only when the realized ICD outcome has explicit
+    # alcohol attribution or a non-proxy evidence-backed modifier.
+    alcohol = _boozehound_postmortem_context(
+        country=country, sex=sex, age=age, cause=cause, detail=detail, deep=deep,
+        doctor=narrator, rng=rng,
+    )
+    if alcohol is not None:
+        narrator = narrator or str(alcohol.get("doctor", "") or "")
+        enrichments.append(alcohol)
+
+    if not factual.get("available") and not enrichments:
+        return _unsupported_country_postmortem(country)
+
+    if not narrator:
+        doctors = ("👩‍⚕️", "👨‍⚕️", "🧑‍⚕️")
+        narrator = doctors[int(float(rng.random()) * len(doctors)) % len(doctors)]
+
+    country_footer = ""
+    if fallback_pathway is not None:
+        if country_code == "ca":
+            country_footer = "No additional Canada-specific pathway evidence was available for this outcome."
+        else:
+            country_footer = str(fallback_pathway.get("summary", "")).strip()
+    elif country_code == "fi" and not any(
+        str(x.get("model_id", "")).startswith("fi-") for x in enrichments if isinstance(x, dict)
+    ):
+        country_footer = "No additional Finland-specific pathway evidence was available for this outcome."
+
+    return {
+        "available": True,
+        "modeled": any(bool(x.get("modeled")) for x in enrichments),
+        "contextual": True,
+        "fallback": False,
+        "presentation": "generic-factual-postmortem",
+        "doctor": narrator,
+        "rule_id": "GENERIC_FACTUAL_POSTMORTEM",
+        "kind": "composite",
+        "model_id": "generic-realized-postmortem-v1",
+        "summary": " ".join(str(x) for x in factual.get("lines", [])),
+        "factual": factual,
+        "enrichments": enrichments,
+        "country_footer": country_footer,
+        "basis": "already-realized simulation fields + code-indexed ICD knowledge + applicable evidence enrichments",
+        "limitations": "Modeled context is labeled separately from realized simulation facts; no unrolled treatment or intermediate medical history is invented.",
+        "provenance": [],
+    }
+
+
+def _unsupported_country_postmortem(country: str) -> dict[str, object] | None:
+    """Return presentation-only country fallbacks where explicitly designed.
+
+    These objects consume no RNG and add no medical inference.  They exist so
+    the arcade renderer can say that a country-specific pathway model is absent
+    without borrowing another country's health-system assumptions.
+    """
+    if str(country).strip().lower() != "fi":
+        return None
+    return {
+        "available": True,
+        "modeled": False,
+        "fallback": True,
+        "presentation": "fi-public-data-fallback",
+        "rule_id": "FI_NO_PUBLIC_POSTMORTEM_PATHWAY",
+        "kind": "fallback",
+        "model_id": "none",
+        "summary": "No Finland-specific public-data pathway reconstruction is available.",
+        "basis": "presentation-only fallback; no medical pathway inferred",
+        "limitations": "The realized cause remains unchanged.",
+        "provenance": [],
+    }
+
+
 # ---------------------------------------------------------------------------
 # v0.11 seasonal death timing
 # ---------------------------------------------------------------------------
@@ -7799,6 +8441,8 @@ def simulate(
     x44_substance_context_rng: random.Random | None = None,
     traffic_context_rng: random.Random | None = None,
     place_rng: random.Random | None = None,
+    postmortem_enabled: bool = False,
+    postmortem_rng: random.Random | None = None,
     cause_detail_mode: str = "broad",
     seasonal_source: SeasonalTimingSource | None = None,
     seasonal_rng: random.Random | None = None,
@@ -7865,6 +8509,10 @@ def simulate(
                 "substances_roll",
                 "substances_model",
                 "substances_context_id",
+                "postmortem_rule",
+                "postmortem_summary",
+                "postmortem_model",
+                "postmortem_modeled",
                 "death_month",
                 "death_month_probability",
                 "seasonal_index",
@@ -7880,6 +8528,8 @@ def simulate(
         print(f"sex: {sex}")
         print_record_banner(sex)
         print(f"starting age: {start_age}")
+        if postmortem_enabled:
+            print("modeled postmortem: ON (doctor reconstruction; downstream of the realized death)")
         if ACTIVE_BOOZEHOUND:
             icon = boozehound_preset_icon()
             label = boozehound_preset_label()
@@ -8219,6 +8869,8 @@ def simulate(
                 or _as_place_outcome(general_place_outcome)
             )
 
+            postmortem_outcome = None
+
             seasonal_outcome = None
             if died and cause_outcome is not None and seasonal_source is not None:
                 if seasonal_rng is None:
@@ -8229,6 +8881,18 @@ def simulate(
                     calendar_year=(birth_year + age if birth_year is not None else None),
                     rng=seasonal_rng,
                 )
+
+            if died and postmortem_enabled:
+                if postmortem_rng is not None:
+                    postmortem_outcome = _resolve_postmortem_outcome(
+                        country=ACTIVE_COUNTRY, sex=sex, age=age, rng=postmortem_rng,
+                        cause=cause_outcome, detail=detail_outcome, deep=deep_detail_outcome,
+                        place=place_outcome, traffic_context=traffic_context_outcome,
+                        substance_context=substance_context_outcome, suicide_reason=suicide_reason_outcome,
+                        seasonal=seasonal_outcome, region=ACTIVE_CANADA_PROVINCE,
+                    )
+                else:
+                    postmortem_outcome = _unsupported_country_postmortem(ACTIVE_COUNTRY)
 
             if writer:
                 writer.writerow(
@@ -8427,6 +9091,18 @@ def simulate(
                             if not substance_context_outcome or not substance_context_outcome.get("available")
                             else substance_context_outcome.get("context_id", "")
                         ),
+                        "postmortem_rule": (
+                            "" if not postmortem_outcome else postmortem_outcome.get("rule_id", "")
+                        ),
+                        "postmortem_summary": (
+                            "" if not postmortem_outcome else postmortem_outcome.get("summary", "")
+                        ),
+                        "postmortem_model": (
+                            "" if not postmortem_outcome else postmortem_outcome.get("model_id", "")
+                        ),
+                        "postmortem_modeled": (
+                            "" if not postmortem_outcome else bool(postmortem_outcome.get("modeled"))
+                        ),
                         "death_month": (
                             ""
                             if not seasonal_outcome or not seasonal_outcome.get("available")
@@ -8473,6 +9149,8 @@ def simulate(
                         print_traffic_context(traffic_context_outcome)
                     if substance_context_outcome is not None:
                         print_substance_context(substance_context_outcome)
+                    if postmortem_outcome is not None:
+                        print_postmortem_pathway(postmortem_outcome, country=ACTIVE_COUNTRY)
                 if ACTIVE_BOOZEHOUND:
                     print_boozehound_exposure_summary(
                         age,
@@ -9372,6 +10050,7 @@ def _preflight_deathmatch_country(
         "x44_substance_context_rng": _deathmatch_rng(args.seed, country, 0x58343453, contestant_index=contestant_index),
         "traffic_context_rng": _deathmatch_rng(args.seed, country, 0x54524649, contestant_index=contestant_index),
         "place_rng": _deathmatch_rng(args.seed, country, 0x504C4143, contestant_index=contestant_index),
+        "postmortem_rng": _deathmatch_rng(args.seed, country, 0x504F5354, contestant_index=contestant_index),
         "seasonal_rng": _deathmatch_rng(args.seed, country, 0x53454153, contestant_index=contestant_index),
     }
     return ctx
@@ -9426,6 +10105,7 @@ def _deathmatch_roll_cause_stack(
     age: int,
     cause_detail_mode: str,
     calendar_year: int | None = None,
+    postmortem_enabled: bool = False,
 ) -> dict[str, object]:
     """Roll cause/detail/month for a contestant after its mortality roll has lost."""
     _activate_deathmatch_context(ctx)
@@ -9440,6 +10120,7 @@ def _deathmatch_roll_cause_stack(
     traffic_context_outcome = None
     general_place_outcome = None
     place_outcome = None
+    postmortem_outcome = None
     seasonal_outcome = None
 
     cause_source = ctx.get("cause_source")
@@ -9552,6 +10233,17 @@ def _deathmatch_roll_cause_stack(
             rng=ctx["seasonal_rng"],
         )
 
+    if postmortem_enabled:
+        postmortem_country = str(ctx.get("country", ""))
+        postmortem_outcome = _resolve_postmortem_outcome(
+            country=postmortem_country, sex=sex, age=age, rng=ctx["postmortem_rng"],
+            cause=cause_outcome, detail=detail_outcome, deep=deep_outcome,
+            place=place_outcome, traffic_context=traffic_context_outcome,
+            substance_context=substance_context_outcome, suicide_reason=suicide_reason_outcome,
+            seasonal=seasonal_outcome,
+            region=(str(ctx.get("province")) if ctx.get("province") is not None else None),
+        )
+
     return {
         "cause": cause_outcome,
         "detail": detail_outcome,
@@ -9563,6 +10255,7 @@ def _deathmatch_roll_cause_stack(
         "x41_drug_class": x41_drug_class_outcome,
         "substance_context": substance_context_outcome,
         "traffic_context": traffic_context_outcome,
+        "postmortem": postmortem_outcome,
         "seasonal": seasonal_outcome,
     }
 
@@ -9694,6 +10387,7 @@ def _print_deathmatch_final_card(
     x41_drug_class_outcome = stack.get("x41_drug_class")
     substance_context_outcome = stack.get("substance_context") or x41_drug_class_outcome
     traffic_context_outcome = stack.get("traffic_context")
+    postmortem_outcome = stack.get("postmortem")
     seasonal_outcome = stack.get("seasonal")
 
     if cause_outcome is not None:
@@ -10756,6 +11450,8 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
     else:
         print("shared lifestyle modifier: none (population period-table baseline)")
     print("result detail defaults: causes + tree detail + seasonality")
+    if getattr(args, "postmortem_enabled", False):
+        print("modeled postmortem: ON (doctor reconstruction; independent downstream RNG per contestant)")
     print()
 
     left_label = deathmatch_contestant_label(
@@ -10859,6 +11555,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
                     age=int(states[idx]["death_age"]),
                     cause_detail_mode=cause_detail_mode,
                     calendar_year=int(states[idx].get("death_year", calendar_year)),
+                    postmortem_enabled=bool(getattr(args, "postmortem_enabled", False)),
                 )
 
             calendar_year += 1
@@ -10926,6 +11623,7 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
                     age=int(states[idx]["death_age"]),
                     cause_detail_mode=cause_detail_mode,
                     calendar_year=death_year,
+                    postmortem_enabled=bool(getattr(args, "postmortem_enabled", False)),
                 )
 
             age += 1
@@ -10961,6 +11659,25 @@ def run_deathmatch(args: argparse.Namespace, selection: str | None) -> int:
         winner_idx=winner_idx, win_mode=args.deathmatch_win,
         timeline_mode=("calendar" if calendar_result else "independent"),
     )
+
+    if getattr(args, "postmortem_enabled", False):
+        print()
+        postmortem_heading = "POSTMORTEM"
+        print(postmortem_heading)
+        print("=" * _terminal_display_width(postmortem_heading))
+        rendered_postmortems = 0
+        for idx, (ctx, state) in enumerate(zip(contexts, states)):
+            stack = state.get("cause_stack") or {}
+            outcome = stack.get("postmortem") if isinstance(stack, dict) else None
+            if not isinstance(outcome, dict) or not outcome.get("available"):
+                continue
+            print_postmortem_pathway(
+                outcome,
+                country=str(ctx.get("country", "")),
+                player_number=player_numbers[idx],
+                leading_blank=(rendered_postmortems > 0),
+            )
+            rendered_postmortems += 1
 
     print()
     if winner_idx is None:
@@ -11064,6 +11781,22 @@ def parse_args() -> argparse.Namespace:
         help=(
             "deathmatch win condition: long=longevity/last contestant standing (default); "
             "short=brevity/first contestant to tap out"
+        ),
+    )
+    p.add_argument(
+        "--postmortem",
+        action="store_true",
+        help=(
+            "after a realized death, add a clearly labeled modeled population-level lead-up/associated-condition "
+            "reconstruction when the bundled pathway evidence supports one; unsupported causes fail closed"
+        ),
+    )
+    p.add_argument(
+        "--deathmachine-ca",
+        action="store_true",
+        help=(
+            "Canadian Death Machine showcase preset: enable the modeled doctor/postmortem layer and select Canada "
+            "when no geography/player mode is otherwise supplied"
         ),
     )
     p.add_argument(
@@ -11406,6 +12139,10 @@ def main() -> int:
     args = parse_args()
     _print_startup_banner()
 
+    args.postmortem_enabled = bool(args.postmortem or args.deathmachine_ca)
+    if args.deathmachine_ca and not (args.country or args.canada or args.deathmatch or args.player):
+        args.canada = True
+
     # Normalize both the legacy --deathmatch interface and the compact repeatable
     # --player interface to the same two-contestant internal representation.
     deathmatch_single_country = False
@@ -11442,6 +12179,12 @@ def main() -> int:
             args.deathmatch = raw_deathmatch
         else:
             print("--deathmatch accepts one or two country codes", file=sys.stderr)
+            return 2
+
+    if args.deathmachine_ca:
+        selected_countries = list(args.deathmatch or []) if args.deathmatch else ["ca" if args.canada else (args.country or "ca")]
+        if any(country != "ca" for country in selected_countries):
+            print("argument error: --deathmachine-ca is a Canada-only showcase; use --postmortem for mixed/non-Canadian runs", file=sys.stderr)
             return 2
 
     # Resolve Deathmatch birth years after both --player and legacy --deathmatch
@@ -11603,6 +12346,18 @@ def main() -> int:
     else:
         data_status(f"{country_display_label()}: initializing data backends...", level=1)
 
+    if args.postmortem_enabled and args.runs is not None:
+        print("argument error: --postmortem/--deathmachine-ca is a per-life presentation layer and is not supported with --runs", file=sys.stderr)
+        return 2
+    if args.postmortem_enabled and args.printout:
+        print("argument error: --postmortem/--deathmachine-ca requires a simulated death and is not supported with --printout", file=sys.stderr)
+        return 2
+    if args.postmortem_enabled and args.causes is False:
+        print("argument error: --postmortem/--deathmachine-ca requires cause-of-death roulette; remove --no-causes", file=sys.stderr)
+        return 2
+    if args.postmortem_enabled:
+        args.causes = True
+
     # Resolve showcase defaults after mode selection. Normal single-run roulette
     # should demonstrate the full cause/detail/month stack without requiring
     # three extra switches. Batch and deterministic printout remain lean unless
@@ -11706,6 +12461,11 @@ def main() -> int:
     # must not perturb mortality/cause/detail or the legacy X80 stream.
     place_rng = random.Random(
         None if args.seed is None else (args.seed ^ 0x504C4143)
+    )
+    # Separate stream: modeled postmortem/doctor presentation is downstream-only.
+    # Enabling it must not perturb mortality, cause, detail, place or timing rolls.
+    postmortem_rng = random.Random(
+        None if args.seed is None else (args.seed ^ 0x504F5354)
     )
     # Separate stream: enabling month timing must not perturb mortality/cause rolls.
     seasonal_rng = random.Random(
@@ -12024,6 +12784,8 @@ def main() -> int:
         x44_substance_context_rng=x44_substance_context_rng,
         traffic_context_rng=traffic_context_rng,
         place_rng=place_rng,
+        postmortem_enabled=bool(args.postmortem_enabled),
+        postmortem_rng=postmortem_rng,
         cause_detail_mode=cause_detail_mode,
         seasonal_source=seasonal_source,
         seasonal_rng=seasonal_rng,

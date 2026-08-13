@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated": "2026-08-11",
+  "generated": "2026-08-13",
   "notes": [
     "Bundled snapshots are runtime defaults only where coverage exists.",
     "Explicit cache paths and refresh/download paths remain supported.",
@@ -108,6 +108,17 @@
       "bytes": 784118
     },
     {
+      "path": "datasets/who/icd10/icd10_annotations_v1.json",
+      "agency": "Mortality Roulette code-indexed ICD annotation layer",
+      "source": "ICD-10 annotations v1 (transport templates, explicit condition/attribution tags, scope metadata)",
+      "reference": "WHO ICD-10 2019 title backbone; project-authored structured annotations",
+      "url": "datasets/README.md",
+      "license": "Project-authored metadata; WHO ICD-10 codes/titles retain WHO licensing conditions",
+      "attribution": "See datasets/README.md; WHO ICD-10 terminology is not modified by the project annotation layer.",
+      "sha256": "56eb01872b780017ee40e0ccf4e0765e6013db79f47e6886053e3955b351a208",
+      "bytes": 439878
+    },
+    {
       "path": "datasets/suicide/suicide_reason_model_v1.json",
       "agency": "Mortality Roulette evidence model (Finnish + Canadian published studies)",
       "source": "Suicide statistical-reason/context model v1",
@@ -150,6 +161,28 @@
       "attribution": "See datasets/README.md and the provenance fields in the JSON.",
       "sha256": "8c81ae5a5dd67504161d8d1c132754e434823106c04c67e77cfd4a280223d102",
       "bytes": 885
+    },
+    {
+      "path": "datasets/pathways/ca_postmortem_pathway_model_v1.json",
+      "agency": "Mortality Roulette evidence model using Statistics Canada open data",
+      "source": "Canadian public-data modeled postmortem/pathway model v1",
+      "reference": "Statistics Canada CCMED/CVSD fatal-event publications and multiple-cause-of-death analyses, various years",
+      "url": "datasets/README.md",
+      "license": "Project-authored derived model; Statistics Canada source material used under the Statistics Canada Open Licence",
+      "attribution": "See datasets/README.md and embedded provenance arrays in the JSON.",
+      "sha256": "5db5f4a33ec14a1fa33d2580e5b1276409c04b0cc3a4a8c7563cb980ac96c003",
+      "bytes": 15312
+    },
+    {
+      "path": "datasets/pathways/fi_postmortem_context_v1.json",
+      "agency": "Mortality Roulette context model using Alzheimer Europe published prevalence estimates",
+      "source": "Finnish postmortem background-context model v1",
+      "reference": "Alzheimer Europe, The Prevalence of Dementia in Europe 2025; Hall et al. 2019 Vantaa 85+ cohort",
+      "url": "datasets/README.md",
+      "license": "Project-authored factual context model; source publication retains its rights",
+      "attribution": "Alzheimer Europe; Hall et al. Vantaa 85+ cohort; see datasets/README.md.",
+      "sha256": "7adbb43c9518d7bdfbc027aa132de2dfdb3d9b0747dc01a0d850b3eb1f428ee0",
+      "bytes": 3009
     }
   ]
 }

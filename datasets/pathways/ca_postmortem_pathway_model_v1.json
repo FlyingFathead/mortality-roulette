@@ -1,0 +1,446 @@
+{
+  "schema": 1,
+  "model_id": "ca-public-postmortem-pathway-v1",
+  "description": "Sparse but all-cause-compatible Canadian public-data postmortem/pathway model. Evidence-backed cause families receive modeled reconstruction/context; every unsupported result fails closed with an explicit no-pathway fallback. The model is downstream of the realized death and never changes mortality or cause selection.",
+  "rules": [
+    {
+      "id": "CA_SNOWMOBILE_FATAL_PATHWAY_2013_2019",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "label_contains": [
+          "snowmobile"
+        ]
+      },
+      "kind": "two_stage_weighted",
+      "title": "WHAT LIKELY HAPPENED?",
+      "basis": "Event-type reconstruction from Statistics Canada CCMED/CVSD aggregate distributions for snowmobile fatalities, 2013-2019.",
+      "limitations": "These are population marginals for fatal snowmobile events. They do not establish an observed individual sequence or the complete medical chain after injury.",
+      "stages": [
+        {
+          "stage": "fatal event",
+          "options": [
+            {
+              "label": "collision with a stationary object",
+              "probability": 0.49
+            },
+            {
+              "label": "submersion",
+              "probability": 0.14
+            },
+            {
+              "label": "ejection",
+              "probability": 0.14
+            },
+            {
+              "label": "avalanche",
+              "probability": 0.1
+            },
+            {
+              "label": "rollover",
+              "probability": 0.06
+            },
+            {
+              "label": "other / not specified",
+              "probability": 0.07
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Snowmobile fatalities in Canada, 2013 to 2019",
+          "url": "https://www150.statcan.gc.ca/n1/pub/11-627-m/11-627-m2021002-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_ATV_FATAL_PATHWAY_2013_2019",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "label_contains": [
+          "all-terrain vehicle",
+          "special all-terrain",
+          "ATV"
+        ]
+      },
+      "kind": "two_stage_weighted",
+      "title": "WHAT LIKELY HAPPENED?",
+      "basis": "Two-stage reconstruction from Statistics Canada CCMED/CVSD aggregate distributions for unintentional ATV fatalities, 2013-2019.",
+      "limitations": "The event mechanism and fatal mechanism are separately published marginals. Their joint distribution is unavailable, so this model samples them independently and must not be read as an observed individual sequence.",
+      "stages": [
+        {
+          "stage": "fatal event",
+          "options": [
+            {
+              "label": "ATV rollover",
+              "probability": 0.45
+            },
+            {
+              "label": "collision with a stationary object",
+              "probability": 0.16
+            },
+            {
+              "label": "ejection from the ATV",
+              "probability": 0.12
+            },
+            {
+              "label": "collision with a moving vehicle",
+              "probability": 0.07
+            },
+            {
+              "label": "other / unspecified collision",
+              "probability": 0.06
+            },
+            {
+              "label": "submersion",
+              "probability": 0.03
+            },
+            {
+              "label": "other incident",
+              "probability": 0.02
+            },
+            {
+              "label": "event not specified",
+              "probability": 0.09
+            }
+          ]
+        },
+        {
+          "stage": "reported final mechanism",
+          "options": [
+            {
+              "label": "fatal traumatic injury",
+              "probability": 0.79
+            },
+            {
+              "label": "compromised breathing",
+              "probability": 0.14
+            },
+            {
+              "label": "drowning",
+              "probability": 0.05
+            },
+            {
+              "label": "other cause",
+              "probability": 0.02
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Circumstances surrounding all-terrain vehicle (ATV) fatalities in Canada, 2013 to 2019",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/210607/dq210607d-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_MOTORCYCLE_FATAL_EVENT_2016_2020",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "V20-V29"
+        ],
+        "label_contains": [
+          "motorcycle",
+          "motorcyclist"
+        ]
+      },
+      "kind": "two_stage_weighted",
+      "title": "WHAT LIKELY HAPPENED?",
+      "basis": "Fatal-event reconstruction from Statistics Canada CCMED/CVSD motorcycle-fatality aggregates, 2016-2020.",
+      "limitations": "The published source gives broad fatal-event classes, not the complete injury/treatment/death sequence. The residual category preserves events outside the two leading classes.",
+      "stages": [
+        {
+          "stage": "fatal event",
+          "options": [
+            {
+              "label": "collision involving two or more vehicles",
+              "probability": 0.55
+            },
+            {
+              "label": "single-vehicle event",
+              "probability": 0.38
+            },
+            {
+              "label": "other / not specified event",
+              "probability": 0.07
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Circumstances surrounding motorcycle fatalities in Canada, 2016 to 2020",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/230515/dq230515b-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_PASSENGER_VEHICLE_FATAL_EVENT_2019",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "V40-V59"
+        ],
+        "label_contains": [
+          "car occupant",
+          "pick-up truck",
+          "pickup truck",
+          "van occupant"
+        ]
+      },
+      "kind": "two_stage_weighted",
+      "title": "WHAT LIKELY HAPPENED?",
+      "basis": "Fatal-event reconstruction from Statistics Canada CCMED/CVSD passenger-vehicle fatality aggregates for 2019.",
+      "limitations": "The 53% multi-vehicle and 40% single-vehicle shares are broad event classes. A 7% residual is retained rather than inventing a more specific event.",
+      "stages": [
+        {
+          "stage": "fatal event",
+          "options": [
+            {
+              "label": "collision involving two or more vehicles",
+              "probability": 0.53
+            },
+            {
+              "label": "single-vehicle event",
+              "probability": 0.4
+            },
+            {
+              "label": "other / not specified event",
+              "probability": 0.07
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Circumstances surrounding passenger vehicle fatalities in Canada, 2019",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/221117/dq221117d-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_PEDESTRIAN_FATAL_CONTEXT_2018_2020",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "V01-V09"
+        ],
+        "label_contains": [
+          "pedestrian"
+        ]
+      },
+      "kind": "marginal_associations",
+      "title": "WHAT MAY HAVE BEEN PART OF THE SCENE?",
+      "basis": "Independent marginal reconstruction from factors reported by Canadian coroners/medical examiners for pedestrian fatalities, 2018-2020.",
+      "limitations": "These are report-level marginals with substantial 'not specified' shares and are not causal probabilities. Conditions can co-occur; independent sampling is an explicit presentation approximation.",
+      "associations": [
+        {
+          "label": "nighttime was reported",
+          "probability": 0.26
+        },
+        {
+          "label": "an environmental factor was reported",
+          "probability": 0.23
+        },
+        {
+          "label": "drugs or alcohol were reported",
+          "probability": 0.2
+        },
+        {
+          "label": "another modifiable factor was reported",
+          "probability": 0.15
+        },
+        {
+          "label": "dark clothing was reported",
+          "probability": 0.09
+        }
+      ],
+      "none_selected": "None of the listed reported factors was selected in this marginal reconstruction.",
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Pedestrian Fatalities in Canada, 2018 to 2020 / CCMED chart of reported factors",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/231030/cg-a002-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_UNINTENTIONAL_FIRE_CONTEXT_2011_2020",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "X00-X09"
+        ],
+        "label_contains": [
+          "fire",
+          "flame",
+          "smoke"
+        ]
+      },
+      "kind": "evidence_summary",
+      "title": "WHAT DOES THE CANADIAN EVIDENCE SAY?",
+      "basis": "Statistics Canada CCMED summary of unintentional fire-related deaths, 2011-2020.",
+      "limitations": "The published percentages have different denominators and are not combined into a synthetic person-level probability tree. The doctor therefore reports population context without randomly assigning a home fire or smoke-inhalation mechanism.",
+      "steps": [
+        "unintentional fire / flame death",
+        "92% of unintentional fire-related deaths in the source were residential",
+        "among unintentional residential fire deaths, smoke inhalation accounted for 68%"
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Circumstances surrounding unintentional fire-related deaths, 2011 to 2020",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/220616/dq220616b-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_FATAL_FALL_INJURY_CONTEXT_2017",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "W00-W19"
+        ],
+        "label_contains": [
+          "fall"
+        ]
+      },
+      "kind": "evidence_summary",
+      "title": "WHAT LIKELY HAPPENED?",
+      "basis": "Statistics Canada reports that fractures to the hip and head were the most common fatal injuries in Canadian deaths due to falls in 2017.",
+      "limitations": "The public release does not provide a mutually exclusive hip-versus-head probability distribution for an individual fatal fall, so no fracture site is randomly assigned.",
+      "steps": [
+        "fatal fall",
+        "serious injury; hip and head fractures were the most common fatal injuries in the Canadian source",
+        "death"
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Causes of death, 2017",
+          "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/190530/dq190530c-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_ALZHEIMER_MULTIPLE_CAUSE_2004_2011",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_exact": [
+          "G30"
+        ],
+        "label_contains": [
+          "alzheimer"
+        ]
+      },
+      "kind": "marginal_associations",
+      "title": "WHAT MAY HAVE ACCOMPANIED IT?",
+      "basis": "Independent marginal reconstruction from conditions recorded on Canadian death certificates where Alzheimer's disease was the underlying cause, 2004-2011.",
+      "limitations": "These are marginal co-recording frequencies, not a temporal or causal sequence. Correlations between conditions are unavailable here, so independent Bernoulli sampling is an explicit approximation.",
+      "associations": [
+        {
+          "label": "cardiovascular disease also recorded",
+          "probability": 0.463
+        },
+        {
+          "label": "respiratory infection also recorded",
+          "probability": 0.253
+        },
+        {
+          "label": "other respiratory disease also recorded",
+          "probability": 0.19
+        },
+        {
+          "label": "genitourinary disease also recorded",
+          "probability": 0.132
+        },
+        {
+          "label": "endocrine disorder also recorded",
+          "probability": 0.096
+        },
+        {
+          "label": "diabetes also recorded",
+          "probability": 0.089
+        },
+        {
+          "label": "musculoskeletal disease also recorded",
+          "probability": 0.084
+        },
+        {
+          "label": "other infection also recorded",
+          "probability": 0.079
+        }
+      ],
+      "none_selected": "None of the listed high-frequency associated conditions was selected in this marginal reconstruction.",
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Mortality from Alzheimer's disease in Canada: A multiple-cause-of-death analysis, 2004 to 2011, Table 3",
+          "url": "https://www150.statcan.gc.ca/n1/pub/82-003-x/2016005/article/14614/tbl/tbl03-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    },
+    {
+      "id": "CA_DIABETES_MULTIPLE_CAUSE_BURDEN_2004_2008",
+      "countries": [
+        "CA"
+      ],
+      "trigger": {
+        "icd_ranges": [
+          "E10-E14"
+        ],
+        "label_contains": [
+          "diabetes mellitus",
+          "diabetes"
+        ]
+      },
+      "kind": "evidence_summary",
+      "title": "WHAT MAY HAVE ACCOMPANIED IT?",
+      "basis": "Statistics Canada multiple-cause-of-death analysis of diabetes mortality, 2004-2008.",
+      "limitations": "The public table used here supports the burden of additional certified causes, not a temporal chain or a distribution of specific complications. No specific complication is invented.",
+      "steps": [
+        "diabetes was the selected underlying cause",
+        "Canadian death certificates with diabetes as the underlying cause recorded an average of 3.2 additional causes",
+        "the public aggregate does not establish which individual complication formed the final chain in this simulated death"
+      ],
+      "provenance": [
+        {
+          "agency": "Statistics Canada",
+          "source": "Mortality from diabetes mellitus, 2004 to 2008: A multiple-cause-of-death analysis, Table 2",
+          "url": "https://www150.statcan.gc.ca/n1/pub/82-003-x/2014003/article/11909/tbl/tbl2-eng.htm",
+          "license": "Statistics Canada Open Licence"
+        }
+      ]
+    }
+  ]
+}

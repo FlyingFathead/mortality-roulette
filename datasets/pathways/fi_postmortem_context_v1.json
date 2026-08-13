@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "model_id": "fi-public-postmortem-context-v1",
+  "description": "Finnish postmortem background-context model. This file supplies population context only when no Finland-specific death-pathway reconstruction is available; it never infers an individual diagnosis or changes the realized cause of death.",
+  "rules": [
+    {
+      "id": "FI_DEMENTIA_PREVALENCE_AE2025_75PLUS",
+      "countries": [
+        "FI"
+      ],
+      "kind": "age_sex_prevalence_context",
+      "title": "AGE-RELATED DEMENTIA CONTEXT",
+      "condition": "dementia",
+      "minimum_age": 75,
+      "age_bands": [
+        {
+          "min_age": 75,
+          "max_age": 79,
+          "male": 0.072,
+          "female": 0.08
+        },
+        {
+          "min_age": 80,
+          "max_age": 84,
+          "male": 0.111,
+          "female": 0.132
+        },
+        {
+          "min_age": 85,
+          "max_age": 89,
+          "male": 0.169,
+          "female": 0.244
+        },
+        {
+          "min_age": 90,
+          "max_age": null,
+          "male": 0.308,
+          "female": 0.447
+        }
+      ],
+      "basis": "Alzheimer Europe 2025 age- and sex-specific dementia prevalence estimates for Europe, shown only when the realized Finnish ICD cause stack itself establishes dementia/Alzheimer disease. Vantaa 85+ is retained separately as an observed Finnish oldest-old cohort benchmark and is never averaged with the Europe estimate.",
+      "limitations": "Population prevalence benchmarks are context only: not annual incidence, not a Mortality Roulette modeled probability, and not a probability that dementia caused the realized death. When the realized ICD code itself establishes dementia/Alzheimer disease, condition status is PRESENT/YES rather than a prevalence-derived probability.",
+      "provenance": [
+        {
+          "agency": "Alzheimer Europe",
+          "source": "The Prevalence of Dementia in Europe 2025",
+          "url": "https://www.alzheimer-europe.org/resources/publications/prevalence-dementia-europe-2025",
+          "doi": "10.5281/ZENODO.18339752"
+        }
+      ],
+      "trigger": {
+        "icd_exact": [
+          "F00",
+          "F01",
+          "F02",
+          "F03",
+          "G30"
+        ]
+      },
+      "additional_benchmarks": [
+        {
+          "id": "VANTAA_85_BASELINE_1991",
+          "minimum_age": 85,
+          "label": "VANTAA 85+",
+          "prevalence": 0.38698010849909587,
+          "display": "38.7% baseline dementia prevalence (214/553)",
+          "population": "Vantaa residents age 85+ in 1991; both sexes",
+          "status": "observed cohort benchmark; not a modeled probability",
+          "provenance": {
+            "agency": "Vantaa 85+ Study",
+            "source": "Prediction models for dementia and neuropathology in the oldest old: the Vantaa 85+ cohort study",
+            "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6343349/",
+            "doi": "10.1186/s13195-018-0450-3"
+          }
+        }
+      ]
+    }
+  ]
+}

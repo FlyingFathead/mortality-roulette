@@ -74,6 +74,15 @@ Links:
 
 WHO remains the copyright holder. The 2019 ICD-10 publication is distributed under **CC BY-ND 3.0 IGO**. The bundled file is terminology/reference material; codes and titles must not be represented as modified WHO terminology.
 
+#### Mortality Roulette ICD annotation / knowledge layer
+
+- `datasets/who/icd10/icd10_annotations_v1.json` is project-authored metadata keyed by normalized ICD code. It does **not** replace WHO terminology; the bundled WHO title catalog remains the authoritative code/title backbone.
+- Runtime matching is code-first: exact normalized code, then explicit 3-character parent inheritance. Title keywords are never used at runtime to assign a genre, alcohol attribution, dementia state, or transport role.
+- The first large annotation block covers all **872** bundled `V01–V99` transport entries. Structured fields encode the victim/vehicle group, role where the exact code provides one, collision/noncollision counterpart/event, traffic/nontraffic status, and a template class used by the generic postmortem composer. A broad public-data range such as `V40–V79` is deliberately not collapsed to an invented leaf code.
+- The same table carries explicit direct-alcohol annotations (`F10`, `G31.2`, `G40.51`, `G62.1`, `G72.1`, `I42.6`, `K29.2`, `K70.*`, `K85.2`, `K86.0`, `X45`) and explicit dementia/Alzheimer state tags (`F00`, `F01`, `F02`, `F03`, `G30`). These are classification semantics, not new probability models.
+- Optional `scope` metadata and scoped `enrichments` can restrict project-authored material by country, region, sex, or age while leaving the universal ICD code/title visible. This is intended for evidence that is genuinely geography-specific.
+- `tools/build_icd_annotations.py` deterministically rebuilds the transport table and curated starter annotations from the bundled title catalog. Build-time parsing is frozen into the JSON; runtime classification remains code-only.
+
 ## Machine-readable provenance
 
 `manifest.json` records the repository path, source agency/table, reference year/range, source URL, licence/attribution note, byte size, and SHA-256 for each bundled file.
@@ -159,6 +168,61 @@ Key references:
 - Transport Canada. *Canadian Motor Vehicle Traffic Collision Statistics: 2023*. https://tc.canada.ca/en/road-transportation/statistics-data/canadian-motor-vehicle-traffic-collision-statistics/2023/canadian-motor-vehicle-traffic-collision-statistics-2023
 - Ahtiluoto et al. *Impact of specialist palliative care on utilization of healthcare and social services at the end-of-life: a nationwide register-based cohort study*. Eur J Public Health. 2025. https://doi.org/10.1093/eurpub/ckaf044
 - Canadian Institute for Health Information. *End-of-Life Hospital Care for Cancer Patients*. 2013. https://publications.gc.ca/collections/collection_2013/icis-cihi/H117-5-22-2013-eng.pdf
+
+### Canadian modeled postmortem / pathway model
+
+- `datasets/pathways/ca_postmortem_pathway_model_v1.json` is an opt-in, downstream, population-level reconstruction/context model used by `--postmortem` and the Canada-specific `--deathmachine-ca` showcase. It does **not** alter the mortality roll, selected underlying cause, detailed ICD result, PLACE, seasonal timing, or any upstream RNG stream.
+- The specialist model deliberately distinguishes three evidence shapes: (1) weighted event-type marginals, (2) independently sampled multiple-cause/context marginals, and (3) non-random evidence summaries where the public source does not support a defensible mutually exclusive distribution. As of v0.13.13, an unsupported specialist rule no longer suppresses the generic doctor: already-realized simulation fields and ICD meaning are narrated first, then the Canadian pathway model adds whatever it can. If it adds nothing, the box ends with a short `No additional Canada-specific pathway evidence was available` footer.
+- Statistics Canada material in this model is covered by the **Statistics Canada Open Licence**. Mortality Roulette is a value-added adaptation and does not imply Statistics Canada endorsement. Source URLs and licence labels are retained per rule in the JSON.
+- Initial cause-family coverage:
+  - **Snowmobile fatalities, 2013–2019:** fatal-event distribution from CCMED/CVSD: stationary-object collision 49%, submersion 14%, ejection 14%, avalanche 10%, rollover 6%, other/not specified 7%.
+  - **ATV fatalities, 2013–2019:** event and reported fatal-mechanism marginals. These two marginals are sampled independently because the public source does not expose their joint distribution.
+  - **Motorcycle fatalities, 2016–2020:** 55% collision involving two or more vehicles, 38% single-vehicle event, 7% residual other/not specified.
+  - **Passenger-vehicle fatalities, 2019:** 53% collision involving two or more vehicles, 40% single-vehicle event, 7% residual other/not specified.
+  - **Pedestrian fatalities, 2018–2020:** separately reported CCMED factors (nighttime, environmental factors, drugs/alcohol, other modifiable factors, dark clothing). These are not causal probabilities and have substantial `not specified` shares in the source.
+  - **Unintentional fire-related deaths, 2011–2020:** evidence summary only. Statistics Canada reports 92% of unintentional fire-related deaths were residential and smoke inhalation accounted for 68% of unintentional residential fire deaths. Because the denominators differ, the v1 model does not multiply these into a synthetic individual probability tree.
+  - **Fatal falls, 2017:** evidence summary only. Statistics Canada reports hip and head fractures as the most common fatal injuries; the public release does not provide a mutually exclusive fracture-site distribution, so v1 does not randomly assign one.
+  - **Alzheimer's disease, 2004–2011:** multiple-cause marginal co-recording frequencies when Alzheimer's was the underlying cause (cardiovascular 46.3%, respiratory infection 25.3%, other respiratory 19.0%, genitourinary 13.2%, endocrine 9.6%, diabetes 8.9%, musculoskeletal 8.4%, other infection 7.9%). These are certificate co-recordings, not a temporal chain.
+  - **Diabetes mellitus, 2004–2008:** evidence summary only. Deaths with diabetes as the underlying cause had an average 3.2 additional causes recorded; the public aggregate does not identify a single individual complication chain, so no specific complication is invented.
+- Independent RNG rule: doctor identity and all postmortem sampling use a dedicated `POST` stream (`0x504F5354`) so turning the feature on cannot change a seeded mortality/cause/detail/place/timing result. Deathmatch receives one independent postmortem stream per contestant.
+
+- In active boozehound runs, the postmortem resolver may add **ALCOHOL-CODE / HAZARD CONTEXT**. Directly alcohol-coded ICD outcomes (for example `K70.*` and `G31.2`) are identified from explicit code annotations. A generic proxy-only cause weight is **not** enough to create an alcohol-themed postmortem; for example the current proxy-v1 `I63` mapping remains risk-model metadata rather than a claim that the stroke itself was alcohol-attributed. Non-direct alcohol context requires a genuinely evidence-backed non-proxy basis.
+- **CIHI local research inputs:** public CIHI injury/trauma and hip-fracture workbooks may be cached under Git-ignored `local-data/cihi/` for non-commercial research/education and model reconnaissance. They are not bundled, committed, copied into the pathway JSON, or required at runtime. CIHI's published Terms of Use separately restrict incorporation of CIHI Materials into software applications without prior written authorization; v0.13.10 therefore ships no CIHI material or CIHI-derived runtime parameter.
+
+Key Statistics Canada references:
+
+- *Snowmobile fatalities in Canada, 2013 to 2019.* https://www150.statcan.gc.ca/n1/pub/11-627-m/11-627-m2021002-eng.htm
+- *Circumstances surrounding all-terrain vehicle (ATV) fatalities in Canada, 2013 to 2019.* https://www150.statcan.gc.ca/n1/daily-quotidien/210607/dq210607d-eng.htm
+- *Circumstances surrounding motorcycle fatalities in Canada, 2016 to 2020.* https://www150.statcan.gc.ca/n1/daily-quotidien/230515/dq230515b-eng.htm
+- *Circumstances surrounding passenger vehicle fatalities in Canada, 2019.* https://www150.statcan.gc.ca/n1/daily-quotidien/221117/dq221117d-eng.htm
+- *Pedestrian Fatalities in Canada, 2018 to 2020.* https://www150.statcan.gc.ca/n1/daily-quotidien/231030/cg-a002-eng.htm
+- *Circumstances surrounding unintentional fire-related deaths, 2011 to 2020.* https://www150.statcan.gc.ca/n1/daily-quotidien/220616/dq220616b-eng.htm
+- *Causes of death, 2017.* https://www150.statcan.gc.ca/n1/daily-quotidien/190530/dq190530c-eng.htm
+- *Mortality from Alzheimer's disease in Canada: A multiple-cause-of-death analysis, 2004 to 2011*, Table 3. https://www150.statcan.gc.ca/n1/pub/82-003-x/2016005/article/14614/tbl/tbl03-eng.htm
+- *Mortality from diabetes mellitus, 2004 to 2008: A multiple-cause-of-death analysis*, Table 2. https://www150.statcan.gc.ca/n1/pub/82-003-x/2014003/article/11909/tbl/tbl2-eng.htm
+- Statistics Canada Open Licence: https://www.statcan.gc.ca/en/reference/licence
+
+### Finnish postmortem background context
+
+- `datasets/pathways/fi_postmortem_context_v1.json` is a **context-only** companion to the modeled postmortem layer. It is consulted for Finnish players only when no stronger Finland-specific pathway reconstruction is available.
+- v1 includes Alzheimer Europe 2025 age/sex dementia prevalence estimates for ages **75–79, 80–84, 85–89, and 90+**. Men: 7.2%, 11.1%, 16.9%, 30.8%. Women: 8.0%, 13.2%, 24.4%, 44.7%. As of v0.13.13 the rule is code-gated to realized dementia/Alzheimer families `F00`, `F01`, `F02`, `F03`, or `G30`; **age alone and title-keyword matches are insufficient**.
+- When the realized ICD code itself establishes dementia, the postmortem state is `DEMENTIA: YES` rather than a percentage. `F00`/`G30` also establish `ALZHEIMER: YES`. The percentages remain separately labelled **population benchmarks**, not annual incidence and not a Mortality Roulette modeled probability.
+- For Finnish deaths at age 85+, the same context object also carries the **Vantaa 85+** baseline benchmark: 214 of 553 clinically examined Vantaa residents age 85+ had dementia at baseline in 1991 (38.7%). Another 101 participants were diagnosed during follow-up, but that longitudinal count is not folded into the baseline prevalence. The Vantaa figure is not averaged with Alzheimer Europe because the populations, calendar periods, sex stratification and study designs differ.
+- The report derives updated five-year age-band prevalence estimates from community-based studies and applies those rates to UN World Population Prospects 2024 population projections for 2025/2050, including Finland.
+- As of v0.13.13 the generic factual composer runs before this context model. The politician/`💸` missing-data gag is therefore a true final fallback only when the realized cause/context fields themselves cannot produce a meaningful postmortem.
+
+Primary references:
+
+- Alzheimer Europe. *The Prevalence of Dementia in Europe 2025.* DOI `10.5281/ZENODO.18339752`. https://www.alzheimer-europe.org/resources/publications/prevalence-dementia-europe-2025
+- Hall A, et al. *Prediction models for dementia and neuropathology in the oldest old: the Vantaa 85+ cohort study.* Alzheimer's Research & Therapy. 2019;11:11. DOI `10.1186/s13195-018-0450-3`. https://pmc.ncbi.nlm.nih.gov/articles/PMC6343349/
+
+### Canadian dementia surveillance reference
+
+- Public Health Agency of Canada, **Canadian Chronic Disease Surveillance System (CCDSS)** currently reports dementia including Alzheimer disease through 2023–2024 and provides national five-year age-specific estimates. This is the preferred Canadian source family for future Canadian prevalence benchmarks rather than importing Alzheimer Europe percentages into Canada.
+- CCDSS explicitly notes that its administrative-data case classification indicates that surveillance criteria were met and does not itself confirm a clinical diagnosis; this distinction must be retained if the data are added to runtime context.
+- Data tool: https://health-infobase.canada.ca/ccdss/data-tool/
+- Methods: https://health-infobase.canada.ca/ccdss/Methods
+- PHAC dementia overview: https://www.canada.ca/en/public-health/services/diseases/dementia.html
 
 ### Finnish F10 subtype classification context
 
